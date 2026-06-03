@@ -14,8 +14,8 @@ public class VideoService {
 
         log.info("Video processing started for URL: {}", youtubeUrl);
 
-        File videoDir = new File("videos");
-        File audioDir = new File("audio");
+        File videoDir = new File("/data/videos");
+        File audioDir = new File("/data/audio");
 
         if (!videoDir.exists()) {
             videoDir.mkdirs();
@@ -25,8 +25,8 @@ public class VideoService {
             audioDir.mkdirs();
         }
 
-        String videoPath = "videos/recipe.mp4";
-        String audioPath = "audio/recipe.wav";
+        String videoPath = "/data/videos/recipe.mp4";
+        String audioPath = "/data/audio/recipe.wav";
 
         downloadVideo(youtubeUrl, videoPath);
         extractAudio(videoPath, audioPath);

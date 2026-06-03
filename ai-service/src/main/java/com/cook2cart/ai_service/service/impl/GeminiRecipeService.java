@@ -1,5 +1,6 @@
 package com.cook2cart.ai_service.service.impl;
 
+import com.cook2cart.ai_service.dto.CombineSourcesRequest;
 import com.cook2cart.ai_service.dto.Ingredient;
 import com.cook2cart.ai_service.dto.RecipeResponse;
 import com.cook2cart.ai_service.service.RecipeService;
@@ -213,5 +214,377 @@ public class GeminiRecipeService implements RecipeService {
             }
         }
         return response;
+    }
+
+    @Override
+    public RecipeResponse combineIngredients(CombineSourcesRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Request must not be null");
+        }
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            log.warn("Gemini API key is not configured. Falling back to local/mock combination processing...");
+            return getFallbackCombineResponse(request);
+        }
+
+        try {
+            String promptText = "You are a Multimodal AI Recipe Processing Assistant.\n" +
+                    "Your job is to combine recipe information from three sources: Speech Transcript, OCR Text Extracted from Video Frames, and Vision-Based Ingredient Detection.\n\n" +
+                    "Input Data:\n" +
+                    "- Speech Transcript: \"" + (request.getSpeechTranscript() != null ? request.getSpeechTranscript() : "") + "\"\n" +
+                    "- OCR Text: \"" + (request.getOcrText() != null ? request.getOcrText() : "") + "\"\n" +
+                    "- Vision Detections: " + (request.getVisionDetections() != null ? request.getVisionDetections().toString() : "[]") + "\n" +
+                    "- Servings / Target People Count: " + (request.getServings() != null ? request.getServings() : "2") + "\n\n" +
+                    "Perform ALL of the following tasks:\n" +
+                    "1. Extract ingredients from all three sources: Speech Transcript, OCR Text, and Vision Detections.\n" +
+                    "2. Merge ingredients that refer to the same item (e.g. translate regional or synonym names to standard English names: 'onion' and 'onions' -> 'onion', 'mirchi' or 'hari mirch' -> 'green chilli', 'pyaz' -> 'onion', 'dhaniya' -> 'coriander', etc.).\n" +
+                    "3. Track and set the 'source' field for each ingredient:\n" +
+                    "   - If an ingredient appears in OCR but not in speech: Mark source=\"ocr\"\n" +
+                    "   - If an ingredient appears in Vision but not in speech: Mark source=\"vision\"\n" +
+                    "   - If an ingredient appears in multiple sources: Mark source as a combination of sources, e.g. \"speech+ocr+vision\", \"speech+ocr\", \"speech+vision\", \"ocr+vision\".\n" +
+                    "   - If an ingredient appears in speech only: Mark source=\"speech\".\n" +
+                    "4. Extract quantities and units from the Speech Transcript and OCR Text whenever available.\n" +
+                    "5. If Vision detects an ingredient but no quantity is available: Predict/estimate the ingredient quantity based on the serving/people count. Mark this ingredient as estimated=true.\n" +
+                    "6. Infer ingredients inside mixtures or masalas. E.g., if the speech transcript describes roasting/grinding/mixing/preparing ingredients (like coriander seeds, cumin seeds, cloves, cinnamon) to make a powder/paste/mixture/masala, and later adds that masala/mixture/paste, you must infer the constituent ingredients (coriander seeds, cumin seeds, cloves, cinnamon) and include them in the final list, and NOT just the generic masala.\n" +
+                    "7. Remove duplicate ingredients.\n" +
+                    "8. Return confidence scores (a double between 0.0 and 1.0) for each ingredient. If merged from multiple sources, combine the confidence scores (e.g., using formula: 1 - (1-c1)*(1-c2)... or similar logic indicating higher confidence).\n" +
+                    "9. Return ONLY valid JSON matching the following schema. No markdown block wrapper, no conversational text.\n\n" +
+                    "Output Schema:\n" +
+                    "{\n" +
+                    "  \"languageDetected\": \"string\",\n" +
+                    "  \"englishTranscript\": \"string\",\n" +
+                    "  \"ingredients\": [\n" +
+                    "    {\n" +
+                    "      \"name\": \"string\",\n" +
+                    "      \"recipeQuantity\": number or null,\n" +
+                    "      \"recipeUnit\": \"string\" or null,\n" +
+                    "      \"estimated\": boolean,\n" +
+                    "      \"source\": \"string\",\n" +
+                    "      \"confidence\": number\n" +
+                    "    }\n" +
+                    "  ]\n" +
+                    "}";
+
+            Map<String, Object> requestBody = new HashMap<>();
+
+            Map<String, Object> textPart = new HashMap<>();
+            textPart.put("text", promptText);
+
+            Map<String, Object> partsMap = new HashMap<>();
+            partsMap.put("parts", Collections.singletonList(textPart));
+
+            requestBody.put("contents", Collections.singletonList(partsMap));
+
+            Map<String, Object> responseConfig = new HashMap<>();
+            responseConfig.put("responseMimeType", "application/json");
+            requestBody.put("generationConfig", responseConfig);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            String url = geminiUrl + "?key=" + apiKey;
+
+            log.info("Sending request to Gemini API for ingredient combination...");
+            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                RecipeResponse recipeResponse = parseGeminiResponse(response.getBody());
+                if (recipeResponse != null && recipeResponse.getIngredients() != null) {
+                    Integer servings = request.getServings();
+                    if (servings == null) servings = 2;
+                    for (Ingredient ing : recipeResponse.getIngredients()) {
+                        MetricConverter.convertToMetric(ing, recipeResponse.getEnglishTranscript(), servings);
+                    }
+                }
+                return recipeResponse;
+            } else {
+                log.error("Gemini API call failed with status: {}", response.getStatusCode());
+                return getFallbackCombineResponse(request);
+            }
+        } catch (Exception e) {
+            log.error("Error calling Gemini API for combination: {}", e.getMessage(), e);
+            return getFallbackCombineResponse(request);
+        }
+    }
+
+    private RecipeResponse getFallbackCombineResponse(CombineSourcesRequest request) {
+        log.info("Generating intelligent fallback response for ingredient combination...");
+        
+        Map<String, ParsedIngredient> map = new LinkedHashMap<>();
+        
+        parseTextSource(request.getSpeechTranscript(), "speech", 0.95, map);
+        
+        parseTextSource(request.getOcrText(), "ocr", 0.90, map);
+        
+        if (request.getVisionDetections() != null) {
+            for (String detection : request.getVisionDetections()) {
+                String normalized = normalizeIngredientName(detection);
+                if (!normalized.isEmpty()) {
+                    ParsedIngredient pi = map.computeIfAbsent(normalized, ParsedIngredient::new);
+                    pi.sources.add("vision");
+                    if (!pi.confidences.contains(0.85)) {
+                        pi.confidences.add(0.85);
+                    }
+                }
+            }
+        }
+        
+        List<String> inferredMasala = inferMasalaIngredients(request.getSpeechTranscript());
+        boolean hasMasalaInText = false;
+        ParsedIngredient combinedMasalaPi = new ParsedIngredient("masala");
+        
+        for (String key : new ArrayList<>(map.keySet())) {
+            if (key.equals("masala") || key.equals("powder") || key.equals("paste") || key.equals("mixture")) {
+                hasMasalaInText = true;
+                ParsedIngredient removed = map.remove(key);
+                if (removed != null) {
+                    combinedMasalaPi.sources.addAll(removed.sources);
+                    combinedMasalaPi.confidences.addAll(removed.confidences);
+                    if (combinedMasalaPi.recipeQuantity == null) {
+                        combinedMasalaPi.recipeQuantity = removed.recipeQuantity;
+                        combinedMasalaPi.recipeUnit = removed.recipeUnit;
+                    }
+                }
+            }
+        }
+        
+        if (hasMasalaInText && !inferredMasala.isEmpty()) {
+            for (String inferredIng : inferredMasala) {
+                ParsedIngredient pi = map.computeIfAbsent(inferredIng, ParsedIngredient::new);
+                pi.sources.addAll(combinedMasalaPi.sources);
+                pi.confidences.addAll(combinedMasalaPi.confidences);
+                if (pi.recipeQuantity == null) {
+                    pi.recipeQuantity = combinedMasalaPi.recipeQuantity;
+                    pi.recipeUnit = combinedMasalaPi.recipeUnit;
+                }
+            }
+        }
+        
+        List<Ingredient> ingredients = new ArrayList<>();
+        Integer servings = request.getServings();
+        if (servings == null) {
+            servings = 2;
+        }
+        
+        for (ParsedIngredient pi : map.values()) {
+            double combinedConfidence = combineConfidences(pi.confidences);
+            
+            List<String> orderedSources = new ArrayList<>();
+            if (pi.sources.contains("speech")) orderedSources.add("speech");
+            if (pi.sources.contains("ocr")) orderedSources.add("ocr");
+            if (pi.sources.contains("vision")) orderedSources.add("vision");
+            String sourceStr = String.join("+", orderedSources);
+            if (sourceStr.isEmpty()) {
+                sourceStr = "vision";
+            }
+            
+            Ingredient ing = new Ingredient(
+                pi.name,
+                pi.recipeQuantity,
+                pi.recipeUnit,
+                pi.recipeQuantity == null,
+                sourceStr,
+                combinedConfidence
+            );
+            
+            MetricConverter.convertToMetric(ing, request.getSpeechTranscript(), servings);
+            ingredients.add(ing);
+        }
+        
+        String language = "en";
+        return new RecipeResponse(language, request.getSpeechTranscript(), ingredients);
+    }
+
+    private void parseTextSource(String text, String sourceName, double baseConfidence, Map<String, ParsedIngredient> map) {
+        if (text == null || text.trim().isEmpty()) {
+            return;
+        }
+
+        String lowerText = text.toLowerCase();
+        
+        Map<String, String> candidateTranslations = new LinkedHashMap<>();
+        candidateTranslations.put("coriander seeds", "coriander seeds");
+        candidateTranslations.put("cumin seeds", "cumin seeds");
+        candidateTranslations.put("chocolate chips", "chocolate chips");
+        candidateTranslations.put("olive oil", "olive oil");
+        candidateTranslations.put("minced garlic", "minced garlic");
+        candidateTranslations.put("cherry tomatoes", "cherry tomatoes");
+        candidateTranslations.put("grated parmesan cheese", "grated parmesan cheese");
+        candidateTranslations.put("fresh basil leaves", "fresh basil leaves");
+        candidateTranslations.put("baking soda", "baking soda");
+        candidateTranslations.put("vanilla extract", "vanilla extract");
+        
+        candidateTranslations.put("onion", "onion");
+        candidateTranslations.put("onions", "onion");
+        candidateTranslations.put("pyaz", "onion");
+        candidateTranslations.put("vengayam", "onion");
+        
+        candidateTranslations.put("tomato", "tomato");
+        candidateTranslations.put("tomatoes", "tomato");
+        candidateTranslations.put("tamatar", "tomato");
+        
+        candidateTranslations.put("green chilli", "green chilli");
+        candidateTranslations.put("green chili", "green chilli");
+        candidateTranslations.put("mirchi", "green chilli");
+        candidateTranslations.put("hari mirch", "green chilli");
+        
+        candidateTranslations.put("cloves", "cloves");
+        candidateTranslations.put("cinnamon", "cinnamon");
+        candidateTranslations.put("butter", "butter");
+        candidateTranslations.put("sugar", "sugar");
+        candidateTranslations.put("flour", "flour");
+        candidateTranslations.put("milk", "milk");
+        candidateTranslations.put("egg", "egg");
+        candidateTranslations.put("eggs", "egg");
+        candidateTranslations.put("spaghetti", "spaghetti");
+        candidateTranslations.put("garlic", "garlic");
+        candidateTranslations.put("lasun", "garlic");
+        candidateTranslations.put("lahsun", "garlic");
+        candidateTranslations.put("ginger", "ginger");
+        candidateTranslations.put("adrak", "ginger");
+        candidateTranslations.put("basil", "fresh basil leaves");
+        candidateTranslations.put("peanuts", "peanuts");
+        candidateTranslations.put("salt", "salt");
+        candidateTranslations.put("masala", "masala");
+        candidateTranslations.put("paste", "paste");
+        candidateTranslations.put("powder", "powder");
+        candidateTranslations.put("mixture", "mixture");
+
+        for (Map.Entry<String, String> entry : candidateTranslations.entrySet()) {
+            String keyword = entry.getKey();
+            String stdName = entry.getValue();
+            
+            if (lowerText.contains(keyword)) {
+                ParsedIngredient pi = map.computeIfAbsent(stdName, ParsedIngredient::new);
+                pi.sources.add(sourceName);
+                if (!pi.confidences.contains(baseConfidence)) {
+                    pi.confidences.add(baseConfidence);
+                }
+                extractQuantityAndUnit(lowerText, keyword, pi);
+            }
+        }
+    }
+
+    private void extractQuantityAndUnit(String text, String keyword, ParsedIngredient pi) {
+        int idx = text.indexOf(keyword);
+        if (idx == -1) return;
+        
+        String prefix = text.substring(Math.max(0, idx - 30), idx).trim();
+        
+        java.util.regex.Pattern numPattern = java.util.regex.Pattern.compile(
+            "(\\d+(?:\\.\\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|half|quarter|three quarters|a)\\s*(cup|tsp|teaspoon|tbsp|tablespoon|spoon|gram|g|ml|ounce|oz|clove|piece|pcs|pinch|handful)?s?\\b"
+        );
+        java.util.regex.Matcher m = numPattern.matcher(prefix);
+        
+        double qty = -1.0;
+        String unit = null;
+        while (m.find()) {
+            String qtyStr = m.group(1);
+            String unitStr = m.group(2);
+            
+            double val = parseNumberWord(qtyStr);
+            if (val > 0) {
+                qty = val;
+                unit = unitStr;
+            }
+        }
+        
+        if (qty > 0) {
+            if (pi.recipeQuantity == null) {
+                pi.recipeQuantity = qty;
+                pi.recipeUnit = unit;
+            }
+        }
+    }
+
+    private double parseNumberWord(String word) {
+        if (word == null) return 0.0;
+        word = word.toLowerCase().trim();
+        if (word.equals("one") || word.equals("a")) return 1.0;
+        if (word.equals("two")) return 2.0;
+        if (word.equals("three")) return 3.0;
+        if (word.equals("four")) return 4.0;
+        if (word.equals("five")) return 5.0;
+        if (word.equals("six")) return 6.0;
+        if (word.equals("seven")) return 7.0;
+        if (word.equals("eight")) return 8.0;
+        if (word.equals("nine")) return 9.0;
+        if (word.equals("ten")) return 10.0;
+        if (word.equals("half")) return 0.5;
+        if (word.equals("quarter")) return 0.25;
+        if (word.equals("three quarters")) return 0.75;
+        try {
+            return Double.parseDouble(word);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
+    }
+
+    private double combineConfidences(List<Double> confidences) {
+        if (confidences == null || confidences.isEmpty()) {
+            return 0.0;
+        }
+        double product = 1.0;
+        for (double c : confidences) {
+            product *= (1.0 - c);
+        }
+        double val = 1.0 - product;
+        return Math.round(val * 100.0) / 100.0;
+    }
+
+    private List<String> inferMasalaIngredients(String speech) {
+        List<String> inferred = new ArrayList<>();
+        if (speech == null) return inferred;
+        String lower = speech.toLowerCase();
+        if (lower.contains("roast") || lower.contains("grind") || lower.contains("powder") || lower.contains("blend")) {
+            if (lower.contains("coriander seeds")) inferred.add("coriander seeds");
+            if (lower.contains("cumin seeds")) inferred.add("cumin seeds");
+            if (lower.contains("clove")) inferred.add("cloves");
+            if (lower.contains("cinnamon")) inferred.add("cinnamon");
+        }
+        return inferred;
+    }
+
+    private String normalizeIngredientName(String name) {
+        if (name == null) return "";
+        String lower = name.toLowerCase().trim();
+        if (lower.equals("onions") || lower.equals("pyaz") || lower.equals("onion")) {
+            return "onion";
+        }
+        if (lower.equals("mirchi") || lower.equals("hari mirch") || lower.equals("green chilli") || lower.equals("green chili")) {
+            return "green chilli";
+        }
+        if (lower.equals("coriander seeds") || lower.equals("dhaniya seeds")) {
+            return "coriander seeds";
+        }
+        if (lower.equals("cumin seeds") || lower.equals("jeera")) {
+            return "cumin seeds";
+        }
+        if (lower.equals("cloves") || lower.equals("lavang")) {
+            return "cloves";
+        }
+        if (lower.equals("cinnamon") || lower.equals("dalchini")) {
+            return "cinnamon";
+        }
+        if (lower.contains("brinjal") || lower.contains("aubergine")) {
+            return "eggplant";
+        }
+        if (lower.equals("tamatar") || lower.equals("tomato") || lower.equals("tomatoes")) {
+            return "tomato";
+        }
+        return lower;
+    }
+
+    private static class ParsedIngredient {
+        String name;
+        Double recipeQuantity;
+        String recipeUnit;
+        Set<String> sources = new LinkedHashSet<>();
+        List<Double> confidences = new ArrayList<>();
+
+        ParsedIngredient(String name) {
+            this.name = name;
+        }
     }
 }

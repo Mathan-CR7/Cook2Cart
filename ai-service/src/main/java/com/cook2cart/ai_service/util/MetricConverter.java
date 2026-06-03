@@ -89,6 +89,10 @@ public class MetricConverter {
     }
     
     public static void convertToMetric(Ingredient ingredient, String transcript) {
+        convertToMetric(ingredient, transcript, null);
+    }
+
+    public static void convertToMetric(Ingredient ingredient, String transcript, Integer requestServings) {
         if (ingredient == null) {
             return;
         }
@@ -119,7 +123,7 @@ public class MetricConverter {
 
         if (ingredient.getRecipeQuantity() == null) {
             ingredient.setEstimated(true);
-            int servings = parseServings(transcript);
+            int servings = requestServings != null ? requestServings : parseServings(transcript);
             
             if (name.contains("oil")) {
                 ingredient.setRecipeQuantity(1.0 * servings); // roughly 1 tbsp per serving
@@ -173,6 +177,10 @@ public class MetricConverter {
                 } else {
                     ingredient.setRecipeUnit("piece");
                 }
+            }
+            
+            if (ingredient.getQuantity() != null) {
+                return;
             }
         }
 
@@ -352,12 +360,10 @@ public class MetricConverter {
             } catch (NumberFormatException e) {
             }
         }
-        
         if (t.contains("serves two") || t.contains("for two") || t.contains("two people") || t.contains("two persons")) return 2;
         if (t.contains("serves three") || t.contains("for three") || t.contains("three people") || t.contains("three persons")) return 3;
         if (t.contains("serves four") || t.contains("for four") || t.contains("four people") || t.contains("four persons")) return 4;
         if (t.contains("serves five") || t.contains("for five") || t.contains("five people") || t.contains("five persons")) return 5;
-        
         return 2;
     }
 }

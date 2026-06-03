@@ -1,6 +1,7 @@
 package com.cook2cart.ai_service;
 
 import com.cook2cart.ai_service.controller.RecipeController;
+import com.cook2cart.ai_service.dto.CombineSourcesRequest;
 import com.cook2cart.ai_service.dto.RecipeResponse;
 import com.cook2cart.ai_service.service.RecipeService;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -181,5 +185,179 @@ class AiServiceApplicationTests {
         assertTrue(oil.isEstimated());
         assertEquals(45.0, oil.getQuantity());
         assertEquals("ml", oil.getUnit());
+    }
+
+    @Test
+    void testCombineIngredients_RegionalTranslationAndMerging() {
+        CombineSourcesRequest request = new CombineSourcesRequest(
+                "Add onions and mirchi.",
+                "Add onions",
+                Arrays.asList("Pyaz", "hari mirch"),
+                2
+        );
+
+        RecipeResponse response = recipeService.combineIngredients(request);
+        assertNotNull(response);
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
+        assertNotNull(ingredients);
+        assertEquals(2, ingredients.size());
+
+        // Verify onion is merged and source combined
+        com.cook2cart.ai_service.dto.Ingredient onion = ingredients.stream()
+                .filter(i -> "onion".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(onion);
+        assertEquals("speech+ocr+vision", onion.getSource());
+        // combined confidence: 1 - (1-0.95)*(1-0.90)*(1-0.85) = 1 - 0.05*0.10*0.15 = 1 - 0.00075 = 0.99925 -> 1.0
+        assertEquals(1.0, onion.getConfidence());
+
+        // Verify green chilli is translated and merged
+        com.cook2cart.ai_service.dto.Ingredient greenChilli = ingredients.stream()
+                .filter(i -> "green chilli".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(greenChilli);
+        assertEquals("speech+vision", greenChilli.getSource());
+        // combined confidence: 1 - (1-0.95)*(1-0.85) = 1 - 0.05*0.15 = 1 - 0.0075 = 0.9925 -> 0.99
+        assertEquals(0.99, greenChilli.getConfidence());
+    }
+
+    @Test
+    void testCombineIngredients_OcrOrVisionOnlySources() {
+        CombineSourcesRequest request = new CombineSourcesRequest(
+                "Boil spaghetti.",
+                "Add 1 tablespoon olive oil",
+                Arrays.asList("fresh basil leaves"),
+                2
+        );
+
+        RecipeResponse response = recipeService.combineIngredients(request);
+        assertNotNull(response);
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
+        assertNotNull(ingredients);
+        assertEquals(3, ingredients.size());
+
+        // Spaghetti: speech
+        com.cook2cart.ai_service.dto.Ingredient spaghetti = ingredients.stream()
+                .filter(i -> "spaghetti".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(spaghetti);
+        assertEquals("speech", spaghetti.getSource());
+        assertEquals(0.95, spaghetti.getConfidence());
+
+        // Olive oil: ocr
+        com.cook2cart.ai_service.dto.Ingredient oliveOil = ingredients.stream()
+                .filter(i -> "olive oil".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(oliveOil);
+        assertEquals("ocr", oliveOil.getSource());
+        assertEquals(0.90, oliveOil.getConfidence());
+        assertEquals(1.0, oliveOil.getRecipeQuantity());
+        assertEquals("tablespoon", oliveOil.getRecipeUnit());
+
+        // Fresh basil leaves: vision
+        com.cook2cart.ai_service.dto.Ingredient basil = ingredients.stream()
+                .filter(i -> "fresh basil leaves".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(basil);
+        assertEquals("vision", basil.getSource());
+        assertEquals(0.85, basil.getConfidence());
+        assertTrue(basil.isEstimated());
+    }
+
+    @Test
+    void testCombineIngredients_QuantityEstimationByPeopleCount() {
+        CombineSourcesRequest request = new CombineSourcesRequest(
+                "This serves 3 people.",
+                "",
+                Arrays.asList("onion", "cooking oil"),
+                3
+        );
+
+        RecipeResponse response = recipeService.combineIngredients(request);
+        assertNotNull(response);
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
+        assertNotNull(ingredients);
+        assertEquals(2, ingredients.size());
+
+        // Onion: vision, serves 3 -> 3 * 50 = 150g
+        com.cook2cart.ai_service.dto.Ingredient onion = ingredients.stream()
+                .filter(i -> "onion".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(onion);
+        assertEquals("vision", onion.getSource());
+        assertTrue(onion.isEstimated());
+        assertEquals(150.0, onion.getQuantity());
+        assertEquals("g", onion.getUnit());
+
+        // Cooking oil (contains 'oil'): vision, serves 3 -> 3 * 15 = 45ml
+        com.cook2cart.ai_service.dto.Ingredient oil = ingredients.stream()
+                .filter(i -> "cooking oil".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(oil);
+        assertEquals("vision", oil.getSource());
+        assertTrue(oil.isEstimated());
+        assertEquals(45.0, oil.getQuantity());
+        assertEquals("ml", oil.getUnit());
+    }
+
+    @Test
+    void testCombineIngredients_MasalaInference() {
+        CombineSourcesRequest request = new CombineSourcesRequest(
+                "Roast coriander seeds, cumin seeds, cloves and cinnamon. Grind them into powder. Later add one spoon masala.",
+                "Add 1 tsp masala",
+                Arrays.asList(),
+                2
+        );
+
+        RecipeResponse response = recipeService.combineIngredients(request);
+        assertNotNull(response);
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
+        assertNotNull(ingredients);
+        
+        // "masala" should be removed, and 4 constituent ingredients should be inferred
+        assertEquals(4, ingredients.size());
+        
+        // Assert absence of masala
+        assertTrue(ingredients.stream().noneMatch(i -> i.getName().contains("masala")));
+
+        // Verify coriander seeds inferred and quantity populated from masala
+        com.cook2cart.ai_service.dto.Ingredient coriander = ingredients.stream()
+                .filter(i -> "coriander seeds".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(coriander);
+        assertEquals("speech+ocr", coriander.getSource());
+        assertEquals(1.0, coriander.getRecipeQuantity());
+        // combined confidence: 1 - (1-0.95)*(1-0.90) = 1 - 0.05*0.1 = 1 - 0.005 = 0.995 -> 1.0
+        assertEquals(1.0, coriander.getConfidence());
+
+        // Verify other ingredients
+        assertTrue(ingredients.stream().anyMatch(i -> "cumin seeds".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "cloves".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "cinnamon".equals(i.getName())));
+    }
+
+    @Test
+    void testCombineIngredients_ControllerEndpoint() {
+        CombineSourcesRequest request = new CombineSourcesRequest(
+                "Add eggs and milk.",
+                "Add 1 cup milk",
+                Arrays.asList("egg"),
+                2
+        );
+
+        ResponseEntity<RecipeResponse> responseEntity = recipeController.combineIngredients(request);
+        assertNotNull(responseEntity);
+        assertEquals(200, responseEntity.getStatusCode().value());
+        
+        RecipeResponse response = responseEntity.getBody();
+        assertNotNull(response);
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
+        assertNotNull(ingredients);
+        assertEquals(2, ingredients.size());
     }
 }

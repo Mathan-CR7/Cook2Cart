@@ -1,5 +1,6 @@
 package com.cook2cart.ai_service.controller;
 
+import com.cook2cart.ai_service.dto.CombineSourcesRequest;
 import com.cook2cart.ai_service.dto.RecipeResponse;
 import com.cook2cart.ai_service.service.RecipeService;
 import org.slf4j.Logger;
@@ -26,6 +27,14 @@ public class RecipeController {
                 file.getOriginalFilename(), file.getSize());
         
         RecipeResponse response = recipeService.processRecipeAudio(file);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/combine", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<RecipeResponse> combineIngredients(@RequestBody CombineSourcesRequest request) {
+        log.info("Received request to combine recipe ingredients from multiple sources. Speech Transcript length: {}",
+                request.getSpeechTranscript() != null ? request.getSpeechTranscript().length() : 0);
+        RecipeResponse response = recipeService.combineIngredients(request);
         return ResponseEntity.ok(response);
     }
 }

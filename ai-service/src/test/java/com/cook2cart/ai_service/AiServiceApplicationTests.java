@@ -360,4 +360,31 @@ class AiServiceApplicationTests {
         assertNotNull(ingredients);
         assertEquals(2, ingredients.size());
     }
+
+    @Test
+    void testSynonymTranslationAndVarietyDetection() {
+        CombineSourcesRequest request = new CombineSourcesRequest(
+                "Use vendakkai and kathirikai.",
+                "Add small onion and natuthakali.",
+                Arrays.asList("Thayir", "kothamalli"),
+                2
+        );
+
+        RecipeResponse response = recipeService.combineIngredients(request);
+        assertNotNull(response);
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
+        assertNotNull(ingredients);
+        assertEquals(6, ingredients.size());
+        
+        // Assertions for synonyms/translations
+        assertTrue(ingredients.stream().anyMatch(i -> "lady finger".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "brinjal".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "curd".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "coriander leaves".equals(i.getName())));
+        
+        // Assertions for varieties
+        assertTrue(ingredients.stream().anyMatch(i -> "small onion".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "nattu tomato".equals(i.getName())));
+    }
 }

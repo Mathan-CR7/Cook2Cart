@@ -44,15 +44,15 @@ public class MetricConverter {
         TRANSLATION_MAP.put("pomodoro", "tomato");
 
 
-        TRANSLATION_MAP.put("dhania", "coriander");
-        TRANSLATION_MAP.put("kothamalli", "coriander");
-        TRANSLATION_MAP.put("kothimera", "coriander");
-        TRANSLATION_MAP.put("kothambari", "coriander");
-        TRANSLATION_MAP.put("malli", "coriander");
-        TRANSLATION_MAP.put("cilantro", "coriander");
-        TRANSLATION_MAP.put("coriandre", "coriander");
-        TRANSLATION_MAP.put("koriander", "coriander");
-        TRANSLATION_MAP.put("coriandolo", "coriander");
+        TRANSLATION_MAP.put("dhania", "coriander leaves");
+        TRANSLATION_MAP.put("kothamalli", "coriander leaves");
+        TRANSLATION_MAP.put("kothimera", "coriander leaves");
+        TRANSLATION_MAP.put("kothambari", "coriander leaves");
+        TRANSLATION_MAP.put("malli", "coriander leaves");
+        TRANSLATION_MAP.put("cilantro", "coriander leaves");
+        TRANSLATION_MAP.put("coriandre", "coriander leaves");
+        TRANSLATION_MAP.put("koriander", "coriander leaves");
+        TRANSLATION_MAP.put("coriandolo", "coriander leaves");
 
         TRANSLATION_MAP.put("adrak", "ginger");
         TRANSLATION_MAP.put("inji", "ginger");
@@ -76,16 +76,27 @@ public class MetricConverter {
         TRANSLATION_MAP.put("knoblauch", "garlic");
         TRANSLATION_MAP.put("aglio", "garlic");
 
-        TRANSLATION_MAP.put("baingan", "eggplant");
-        TRANSLATION_MAP.put("baingna", "eggplant");
-        TRANSLATION_MAP.put("kathirikai", "eggplant");
-        TRANSLATION_MAP.put("vankaya", "eggplant");
-        TRANSLATION_MAP.put("badanekai", "eggplant");
-        TRANSLATION_MAP.put("vazhuthananga", "eggplant");
-        TRANSLATION_MAP.put("berenjena", "eggplant");
-        TRANSLATION_MAP.put("aubergine", "eggplant");
-        TRANSLATION_MAP.put("brinjal", "eggplant");
-        TRANSLATION_MAP.put("melanzana", "eggplant");
+        TRANSLATION_MAP.put("baingan", "brinjal");
+        TRANSLATION_MAP.put("baingna", "brinjal");
+        TRANSLATION_MAP.put("kathirikai", "brinjal");
+        TRANSLATION_MAP.put("vankaya", "brinjal");
+        TRANSLATION_MAP.put("badanekai", "brinjal");
+        TRANSLATION_MAP.put("vazhuthananga", "brinjal");
+        TRANSLATION_MAP.put("berenjena", "brinjal");
+        TRANSLATION_MAP.put("aubergine", "brinjal");
+        TRANSLATION_MAP.put("eggplant", "brinjal");
+        TRANSLATION_MAP.put("brinjal", "brinjal");
+        TRANSLATION_MAP.put("melanzana", "brinjal");
+
+        TRANSLATION_MAP.put("vendakkai", "lady finger");
+        TRANSLATION_MAP.put("bhindi", "lady finger");
+        TRANSLATION_MAP.put("okra", "lady finger");
+        TRANSLATION_MAP.put("lady finger", "lady finger");
+
+        TRANSLATION_MAP.put("thayir", "curd");
+        TRANSLATION_MAP.put("dahi", "curd");
+        TRANSLATION_MAP.put("yogurt", "curd");
+        TRANSLATION_MAP.put("curd", "curd");
     }
     
     public static void convertToMetric(Ingredient ingredient, String transcript) {
@@ -99,23 +110,41 @@ public class MetricConverter {
 
         String rawName = ingredient.getName() != null ? ingredient.getName().toLowerCase().trim() : "";
         boolean matched = false;
-        if (TRANSLATION_MAP.containsKey(rawName)) {
-            ingredient.setName(TRANSLATION_MAP.get(rawName));
+
+        // Intercept and preserve variety names before matching generic suffixes
+        if (rawName.contains("small onion")) {
+            ingredient.setName("small onion");
             matched = true;
-        } else {
-            for (Map.Entry<String, String> entry : TRANSLATION_MAP.entrySet()) {
-                String key = entry.getKey();
-                if (rawName.equals(key) || rawName.startsWith(key + " ") || rawName.endsWith(" " + key) || rawName.contains(" " + key + " ")) {
-                    ingredient.setName(entry.getValue());
-                    matched = true;
-                    break;
+        } else if (rawName.contains("big onion")) {
+            ingredient.setName("big onion");
+            matched = true;
+        } else if (rawName.contains("nattu tomato") || rawName.contains("natuthakali") || rawName.contains("nattuthakkali")) {
+            ingredient.setName("nattu tomato");
+            matched = true;
+        } else if (rawName.contains("ponda tomato") || rawName.contains("pondathakkali")) {
+            ingredient.setName("ponda tomato");
+            matched = true;
+        }
+
+        if (!matched) {
+            if (TRANSLATION_MAP.containsKey(rawName)) {
+                ingredient.setName(TRANSLATION_MAP.get(rawName));
+                matched = true;
+            } else {
+                for (Map.Entry<String, String> entry : TRANSLATION_MAP.entrySet()) {
+                    String key = entry.getKey();
+                    if (rawName.equals(key) || rawName.startsWith(key + " ") || rawName.endsWith(" " + key) || rawName.contains(" " + key + " ")) {
+                        ingredient.setName(entry.getValue());
+                        matched = true;
+                        break;
+                    }
                 }
             }
         }
 
         if (!matched) {
-            if (rawName.contains("brinjal") || rawName.contains("aubergine")) {
-                ingredient.setName("eggplant");
+            if (rawName.contains("brinjal") || rawName.contains("aubergine") || rawName.contains("eggplant")) {
+                ingredient.setName("brinjal");
             }
         }
 

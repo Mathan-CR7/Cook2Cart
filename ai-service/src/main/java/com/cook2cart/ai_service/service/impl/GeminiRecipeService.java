@@ -64,7 +64,7 @@ public class GeminiRecipeService implements RecipeService {
                     "6. Quantity Extraction: Extract the quantity and unit associated with each ingredient.\n" +
                     "7. Ingredient Detection: Detect ingredients that appear visually even if they are not mentioned in speech.\n" +
                     "8. Unit Normalization: Preserve the original recipe quantity and unit, and convert quantities into standard units whenever possible using grams (g), kilograms (kg), milliliters (ml), liters (l), or pieces.\n" +
-                    "9. Missing Quantity Estimation: If a quantity is not explicitly specified, estimate a reasonable amount based on common cooking practices and mark all estimated values with: \"estimated\": true.\n" +
+                    "9. Missing Quantity Estimation & Essential Injections: If essential cooking ingredients (like salt, oil, water) are missing or not explicitly specified in the recipe, automatically add them to the ingredients list. Estimate a reasonable quantity for them (and any other ingredients with unspecified quantities) based on the serving count, and mark all estimated/injected values with: \"estimated\": true. Never return null for quantities; use your knowledge to predict a realistic cooking quantity.\n" +
                     "10. Contextual & Unnamed Reference Resolution: If an ingredient is referred to in an unnamed way (e.g. \"add this powder\", \"add this masala\", \"add the prepared mixture\", \"add the ground spices\", \"add the paste\"), analyze earlier recipe steps to identify and extract the exact underlying ingredients that were roasted, ground, blended, mixed, prepared, or combined.\n" +
                     "11. Source Tracking: For every ingredient specify where it was found using 'speech', 'image', 'vision', or 'multiple'.\n\n" +
                     "Rules:\n" +
@@ -121,12 +121,16 @@ public class GeminiRecipeService implements RecipeService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 RecipeResponse recipeResponse = parseGeminiResponse(response.getBody());
                 if (recipeResponse != null && recipeResponse.getIngredients() != null) {
+                    List<Ingredient> mutableIngs = new ArrayList<>(recipeResponse.getIngredients());
+                    injectMissingEssentials(mutableIngs, recipeResponse.getEnglishTranscript(), null);
+                    recipeResponse.setIngredients(mutableIngs);
                     for (Ingredient ing : recipeResponse.getIngredients()) {
                         MetricConverter.convertToMetric(ing, recipeResponse.getEnglishTranscript());
                         if ("ocr".equalsIgnoreCase(ing.getSource())) {
                             ing.setSource("image");
                         }
                     }
+                    recipeResponse.setIngredients(deduplicateIngredients(recipeResponse.getIngredients()));
                 }
                 return recipeResponse;
             } else {
@@ -211,9 +215,13 @@ public class GeminiRecipeService implements RecipeService {
             );
         }
         if (response.getIngredients() != null) {
+            List<Ingredient> mutableIngs = new ArrayList<>(response.getIngredients());
+            injectMissingEssentials(mutableIngs, response.getEnglishTranscript(), null);
+            response.setIngredients(mutableIngs);
             for (Ingredient ing : response.getIngredients()) {
                 MetricConverter.convertToMetric(ing, response.getEnglishTranscript());
             }
+            response.setIngredients(deduplicateIngredients(response.getIngredients()));
         }
         return response;
     }
@@ -254,7 +262,7 @@ public class GeminiRecipeService implements RecipeService {
                     "   - If an ingredient appears in multiple sources: Mark source as a combination of sources, e.g. \"speech+ocr+vision\", \"speech+ocr\", \"speech+vision\", \"ocr+vision\".\n" +
                     "   - If an ingredient appears in speech only: Mark source=\"speech\".\n" +
                     "5. Extract quantities and units from the Speech Transcript and OCR Text whenever available.\n" +
-                    "6. If Vision detects an ingredient but no quantity is available: Predict/estimate the ingredient quantity based on the serving/people count. Mark this ingredient as estimated=true.\n" +
+                    "6. Missing Quantity Estimation & Essential Injections: If essential cooking ingredients (like salt, oil, water) are missing or not explicitly specified, automatically add them to the ingredients list. Estimate a reasonable quantity for them (and any other ingredients with unspecified quantities) based on the serving/people count, and mark all estimated/injected values with: \"estimated\": true. Never return null for quantities; use your knowledge to predict a realistic cooking quantity.\n" +
                     "7. Infer ingredients inside mixtures or masalas. E.g., if the speech transcript describes roasting/grinding/mixing/preparing ingredients (like coriander seeds, cumin seeds, cloves, cinnamon) to make a powder/paste/mixture/masala, and later adds that masala/mixture/paste, you must infer the constituent ingredients (coriander seeds, cumin seeds, cloves, cinnamon) and include them in the final list, and NOT just the generic masala.\n" +
                     "8. Remove duplicate ingredients.\n" +
                     "9. Return confidence scores (a double between 0.0 and 1.0) for each ingredient. If merged from multiple sources, combine the confidence scores (e.g., using formula: 1 - (1-c1)*(1-c2)... or similar logic indicating higher confidence).\n" +
@@ -303,9 +311,13 @@ public class GeminiRecipeService implements RecipeService {
                 if (recipeResponse != null && recipeResponse.getIngredients() != null) {
                     Integer servings = request.getServings();
                     if (servings == null) servings = 2;
+                    List<Ingredient> mutableIngs = new ArrayList<>(recipeResponse.getIngredients());
+                    injectMissingEssentials(mutableIngs, recipeResponse.getEnglishTranscript(), servings);
+                    recipeResponse.setIngredients(mutableIngs);
                     for (Ingredient ing : recipeResponse.getIngredients()) {
                         MetricConverter.convertToMetric(ing, recipeResponse.getEnglishTranscript(), servings);
                     }
+                    recipeResponse.setIngredients(deduplicateIngredients(recipeResponse.getIngredients()));
                 }
                 return recipeResponse;
             } else {
@@ -397,13 +409,17 @@ public class GeminiRecipeService implements RecipeService {
                 sourceStr,
                 combinedConfidence
             );
-            
-            MetricConverter.convertToMetric(ing, request.getSpeechTranscript(), servings);
             ingredients.add(ing);
         }
         
+        injectMissingEssentials(ingredients, request.getSpeechTranscript(), servings);
+        for (Ingredient ing : ingredients) {
+            MetricConverter.convertToMetric(ing, request.getSpeechTranscript(), servings);
+        }
+        List<Ingredient> deduplicated = deduplicateIngredients(ingredients);
+        
         String language = "en";
-        return new RecipeResponse(language, request.getSpeechTranscript(), ingredients);
+        return new RecipeResponse(language, request.getSpeechTranscript(), deduplicated);
     }
 
     private void parseTextSource(String text, String sourceName, double baseConfidence, Map<String, ParsedIngredient> map) {
@@ -695,14 +711,8 @@ public class GeminiRecipeService implements RecipeService {
                     "     - 1 handful coriander -> 20g\n" +
                     "     - pieces/cloves -> pieces (pcs)\n" +
                     "   Populate these in 'quantity' and 'unit' fields.\n" +
-                    "6. Missing Quantity Estimation: If a quantity is missing, estimate a reasonable amount scaled to the serving count (servings=" + servings + ") and mark 'estimated' as true. (e.g., for oil: 15ml * servings, rice: 100g * servings, salt: 2g * servings, onion/tomato: 1 piece/50g * servings, etc.).\n" +
-                    "7. Retain other fields like source and confidence.\n" +
-                    "8. Category and Variety Detection: Dynamically detect and populate the 'category' (e.g., 'Rice', 'Atta', 'Salt', 'Onion', 'Tomato', 'Potato', 'Brinjal', 'Okra', 'Coriander Leaves', 'Green Chilli', 'Oil', 'Chicken', 'Milk', 'Curd', 'Sugar', 'Ghee', 'Ginger Garlic Paste', 'Biryani Masala', 'Spices', or 'Other') and the 'variety' (e.g., 'small' or 'big' for onion; 'nattu' or 'ponda' for tomato; 'basmati', 'sona masoori', 'ponni', 'brown', 'raw', 'idli', 'jeera samba', 'matta' for rice; or null/empty if no variety is specified).\n" +
-                    "9. Products Generation & Recommended Brands: Generate a list of recommended brands (field `recommendedBrands` as a list of strings) and realistic product options under the `products` list.\n" +
-                    "   - For fresh vegetables, fruits, herbs, and leafy vegetables (e.g. Onion, Tomato, Potato, Brinjal, Okra, Mint Leaves, Coriander Leaves, Green Chilli, Carrot, Apple, Banana, etc.), use ONLY 'Store Brand' as the brand (set `recommendedBrands` to `[\"Store Brand\"]` and use `\"Store Brand\"` as the brand for all items in the `products` list).\n" +
-                    "   - For packaged grocery products, dairy products, spices, masalas, oils, rice, flour, sugar, salt, meat products (e.g. Rice, Milk, Curd, Oil, Salt, Ghee, Spices, Masala, Chicken, etc.), DO NOT use 'Store Brand'. Instead, dynamically generate realistic popular market brands (e.g. Rice -> India Gate, Daawat, Fortune; Milk -> Aavin, Amul, Heritage; Curd -> Aavin, Amul, Milky Mist; Oil -> Fortune, Gemini, Saffola; Salt -> Tata, Aashirvaad; Ghee -> Amul, Aashirvaad; Masala -> Aachi, Sakthi, Everest; Chicken -> Suguna, TenderCuts, etc.) for both `recommendedBrands` and the `brand` field in `products` list.\n" +
-                    "   - Estimate a realistic price range using your knowledge of grocery products to generate realistic options. Do NOT use any predefined catalog or hardcoded brands/prices.\n" +
-                    "   - The size must specify the metric weight/volume (e.g. '500g', '1kg', '1L', '500ml', '200g', '4 pcs', '1 bunch'). Each product should have a unique ID (e.g. 'rice_1', 'rice_2').\n\n" +
+                    "6. Missing Quantity Estimation & Essential Injections: If essential cooking ingredients (like salt, oil, water) are missing or not explicitly specified, automatically add them to the ingredients list. Estimate a reasonable quantity for them (and any other ingredients with unspecified quantities) based on the serving count (servings=" + servings + "), and mark all estimated/injected values with: \"estimated\": true. Never return null for quantities; use your knowledge to predict a realistic cooking quantity.\n" +
+                    "7. Retain other fields like source and confidence.\n\n" +
                     "Return ONLY a valid JSON array of ingredient objects matching the following schema. Do not wrap in markdown or conversation.\n\n" +
                     "Output Schema:\n" +
                     "[\n" +
@@ -714,21 +724,7 @@ public class GeminiRecipeService implements RecipeService {
                     "    \"unit\": \"string\" or null,\n" +
                     "    \"estimated\": boolean,\n" +
                     "    \"source\": \"string\",\n" +
-                    "    \"confidence\": number,\n" +
-                    "    \"category\": \"string\",\n" +
-                    "    \"variety\": \"string\" or null,\n" +
-                    "    \"recommendedBrands\": [\n" +
-                    "      \"string\"\n" +
-                    "    ],\n" +
-                    "    \"products\": [\n" +
-                    "      {\n" +
-                    "        \"id\": \"string\",\n" +
-                    "        \"name\": \"string\",\n" +
-                    "        \"brand\": \"string\",\n" +
-                    "        \"size\": \"string\",\n" +
-                    "        \"price\": number\n" +
-                    "      }\n" +
-                    "    ]\n" +
+                    "    \"confidence\": number\n" +
                     "  }\n" +
                     "]";
 
@@ -752,7 +748,16 @@ public class GeminiRecipeService implements RecipeService {
             ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return parseIngredientsResponse(response.getBody());
+                List<Ingredient> parsedList = parseIngredientsResponse(response.getBody());
+                if (parsedList != null) {
+                    parsedList = new ArrayList<>(parsedList);
+                    injectMissingEssentials(parsedList, "serves " + servings, servings);
+                    for (Ingredient ing : parsedList) {
+                        MetricConverter.convertToMetric(ing, "serves " + servings, servings);
+                    }
+                    parsedList = deduplicateIngredients(parsedList);
+                }
+                return parsedList;
             } else {
                 return getFallbackParseResponse(ingredients, servings);
             }
@@ -813,396 +818,16 @@ public class GeminiRecipeService implements RecipeService {
                 name = name.replace(word, "").trim();
             }
             parsed.setName(name);
-
-            MetricConverter.convertToMetric(parsed, "serves " + servings, servings);
-            parsed.setCategory(detectCategory(parsed.getName()));
-            parsed.setVariety(detectVariety(parsed.getName()));
-            parsed.setRecommendedBrands(detectBrands(parsed.getCategory(), parsed.getName()));
-            parsed.setRecommendedPackSizes(detectPackSizes(parsed.getCategory(), parsed.getVariety(), parsed.getName()));
-
-            List<String> brands = parsed.getRecommendedBrands();
-            List<String> sizes = parsed.getRecommendedPackSizes();
-            List<StoreProduct> prodOpts = new ArrayList<>();
-            List<String> productNames = getCategoryProductNames(parsed.getCategory());
-            for (String pName : productNames) {
-                for (String b : brands) {
-                    for (String s : sizes) {
-                        double price = estimateFallbackPrice(parsed.getCategory(), b, s, pName);
-                        String id = parsed.getCategory().toLowerCase().replace(" ", "_") + "_" + (prodOpts.size() + 1);
-                        prodOpts.add(new StoreProduct(id, pName, b, s, price, parsed.getCategory()));
-                    }
-                }
-            }
-            parsed.setProducts(prodOpts);
             result.add(parsed);
         }
-        return result;
+        injectMissingEssentials(result, "serves " + servings, servings);
+        for (Ingredient parsed : result) {
+            MetricConverter.convertToMetric(parsed, "serves " + servings, servings);
+        }
+        return deduplicateIngredients(result);
     }
 
-    private List<String> getCategoryProductNames(String category) {
-        if (category == null) return Collections.emptyList();
-        String cat = category.toLowerCase().trim();
-        switch (cat) {
-            case "rice":
-                return Arrays.asList("Basmati Rice", "Sona Masoori Rice", "Ponni Rice", "Brown Rice", "Raw Rice", "Idli Rice", "Jeera Samba Rice", "Matta Rice", "Rice");
-            case "atta":
-                return Collections.singletonList("Atta");
-            case "salt":
-                return Collections.singletonList("Salt");
-            case "onion":
-                return Arrays.asList("Onion", "Small Onion", "Big Onion");
-            case "tomato":
-                return Arrays.asList("Tomato", "Nattu Tomato", "Ponda Tomato");
-            case "potato":
-                return Collections.singletonList("Potato");
-            case "brinjal":
-                return Collections.singletonList("Eggplant");
-            case "okra":
-                return Arrays.asList("Okra", "Lady Finger");
-            case "coriander leaves":
-                return Arrays.asList("Cilantro", "Coriander Leaves");
-            case "oil":
-                return Collections.singletonList("Cooking Oil");
-            case "chicken":
-                return Arrays.asList("Fresh Chicken", "Fresh Chicken Legs");
-            case "milk":
-                return Collections.singletonList("Fresh Milk");
-            case "curd":
-                return Collections.singletonList("Fresh Curd");
-            case "sugar":
-                return Collections.singletonList("Sugar");
-            case "ghee":
-                return Collections.singletonList("Pure Ghee");
-            case "ginger garlic paste":
-                return Collections.singletonList("Ginger Garlic Paste");
-            case "biryani masala":
-                return Collections.singletonList("Biryani Masala");
-            case "spices":
-                return Arrays.asList("Garam Masala", "Turmeric Powder", "Chilli Powder", "Sambar Powder");
-            default:
-                return Collections.singletonList(category);
-        }
-    }
 
-    private String capitalizeTitle(String name) {
-        if (name == null || name.isEmpty()) return "";
-        String[] parts = name.split("\\s+");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            if (!part.isEmpty()) {
-                sb.append(Character.toUpperCase(part.charAt(0)))
-                  .append(part.substring(1).toLowerCase())
-                  .append(" ");
-            }
-        }
-        return sb.toString().trim();
-    }
-
-    private double estimateFallbackPrice(String category, String brand, String size, String productName) {
-        if (category == null || brand == null || size == null || productName == null) return 50.0;
-        String cat = category.toLowerCase().trim();
-        String b = brand.toLowerCase().trim();
-        String s = size.toLowerCase().trim();
-        String pName = productName.toLowerCase().trim();
-
-        if (cat.contains("rice")) {
-            if (pName.contains("basmati")) {
-                if (b.contains("india gate")) {
-                    if (s.equals("1kg")) return 140.0;
-                    if (s.equals("5kg")) return 680.0;
-                }
-                if (b.contains("daawat") && s.equals("1kg")) return 130.0;
-                if (b.contains("fortune") && s.equals("1kg")) return 125.0;
-            }
-            if (pName.contains("sona masoori")) {
-                if (b.contains("fortune") && s.equals("1kg")) return 65.0;
-                if (b.contains("aashirvaad") && s.equals("1kg")) return 70.0;
-            }
-            if (pName.contains("ponni") && b.contains("ponni") && s.equals("1kg")) return 55.0;
-            if (pName.contains("brown") && b.contains("24 mantra") && s.equals("1kg")) return 90.0;
-            if (pName.contains("raw") && b.contains("store") && s.equals("1kg")) return 50.0;
-            if (pName.contains("idli") && b.contains("local") && s.equals("1kg")) return 45.0;
-            if (pName.contains("jeera") && b.contains("local") && s.equals("1kg")) return 95.0;
-            if (pName.contains("matta") && b.contains("double") && s.equals("1kg")) return 80.0;
-            if (pName.equals("rice") && b.contains("store")) {
-                if (s.equals("1kg")) return 55.0;
-                if (s.equals("5kg")) return 250.0;
-                if (s.equals("10kg")) return 480.0;
-            }
-        }
-        
-        if (cat.contains("atta")) {
-            if (b.contains("aashirvaad")) {
-                if (s.equals("1kg")) return 60.0;
-                if (s.equals("5kg")) return 270.0;
-            }
-            if (b.contains("pillsbury")) {
-                if (s.equals("1kg")) return 65.0;
-                if (s.equals("5kg")) return 290.0;
-            }
-            if (b.contains("annapurna") && s.equals("1kg")) return 58.0;
-            if (b.contains("store") && s.equals("1kg")) return 50.0;
-        }
-        
-        if (cat.contains("salt")) {
-            if (b.contains("tata")) {
-                if (s.equals("100g")) return 10.0;
-                if (s.equals("500g")) return 20.0;
-                if (s.equals("1kg")) return 30.0;
-            }
-            if (b.contains("store") && s.equals("1kg")) return 25.0;
-        }
-        
-        if (cat.contains("onion")) {
-            if (pName.equals("onion")) {
-                if (s.equals("500g")) return 25.0;
-                if (s.equals("1kg")) return 45.0;
-            }
-            if (pName.contains("small") && s.equals("500g")) return 40.0;
-            if (pName.contains("big") && s.equals("500g")) return 25.0;
-        }
-        
-        if (cat.contains("tomato")) {
-            if (pName.equals("tomato")) {
-                if (s.equals("500g")) return 30.0;
-                if (s.equals("1kg")) return 55.0;
-            }
-            if (pName.contains("nattu") && s.equals("500g")) return 35.0;
-            if (pName.contains("ponda") && s.equals("500g")) return 30.0;
-        }
-        
-        if (cat.contains("potato") && b.contains("store") && s.equals("1kg")) return 40.0;
-        
-        if (cat.contains("brinjal") || cat.contains("eggplant")) {
-            if (s.equals("500g")) return 40.0;
-            if (s.equals("1kg")) return 75.0;
-            if (s.equals("1 piece")) return 15.0;
-            if (s.equals("4 pcs")) return 55.0;
-        }
-        
-        if (cat.contains("okra") || cat.contains("lady")) {
-            if (pName.contains("okra")) {
-                if (s.equals("500g")) return 35.0;
-                if (s.equals("1kg")) return 65.0;
-                if (s.equals("10 pcs")) return 10.0;
-                if (s.equals("30 pcs")) return 25.0;
-            }
-            if (pName.contains("lady")) {
-                if (s.equals("500g")) return 35.0;
-                if (s.equals("1kg")) return 65.0;
-            }
-        }
-        
-        if (cat.contains("coriander") || cat.contains("cilantro")) {
-            if (s.equals("100g")) return 15.0;
-            if (s.equals("250g")) return 30.0;
-            if (s.equals("1 bunch")) return 10.0;
-            if (s.equals("3 bunches")) return 25.0;
-        }
-        
-        if (cat.contains("green chilli") && s.equals("100g")) return 15.0;
-        
-        if (cat.contains("oil")) {
-            if (b.contains("fortune")) {
-                if (s.equals("500ml")) return 80.0;
-                if (s.equals("1l")) return 150.0;
-                if (s.equals("5l")) return 700.0;
-            }
-        }
-        
-        if (cat.contains("chicken")) {
-            if (b.contains("suguna")) {
-                if (s.equals("500g")) return 130.0;
-                if (s.equals("1kg")) return 250.0;
-                if (s.equals("4 pcs") || pName.contains("legs")) return 180.0;
-            }
-        }
-        
-        if (cat.contains("milk")) {
-            if (s.equals("1l")) {
-                if (b.contains("amul")) return 68.0;
-                if (b.contains("aavin")) return 62.0;
-                if (b.contains("nandini")) return 60.0;
-            }
-            if (s.equals("500ml") && b.contains("heritage")) return 35.0;
-        }
-        
-        if (cat.contains("curd")) {
-            if (s.equals("500g")) {
-                if (b.contains("aavin")) return 38.0;
-                if (b.contains("amul")) return 42.0;
-            }
-        }
-        
-        if (cat.contains("sugar")) {
-            if (s.equals("1kg")) {
-                if (b.contains("madhur")) return 45.0;
-                if (b.contains("trust")) return 50.0;
-                if (b.contains("dhampure")) return 52.0;
-            }
-        }
-        
-        if (cat.contains("ghee")) {
-            if (s.equals("200ml")) {
-                if (b.contains("amul")) return 145.0;
-                if (b.contains("aashirvaad")) return 155.0;
-            }
-        }
-        
-        if (cat.contains("ginger garlic") && b.contains("aachi") && s.equals("100g")) return 20.0;
-        if (cat.contains("biryani masala") && b.contains("aachi") && s.equals("50g")) return 25.0;
-
-        double qty = 500.0;
-        String sLower = s.toLowerCase();
-        if (sLower.endsWith("kg")) {
-            try { qty = Double.parseDouble(sLower.replace("kg", "")) * 1000.0; } catch (Exception e) {}
-        } else if (sLower.endsWith("g")) {
-            try { qty = Double.parseDouble(sLower.replace("g", "")); } catch (Exception e) {}
-        } else if (sLower.endsWith("ml")) {
-            try { qty = Double.parseDouble(sLower.replace("ml", "")); } catch (Exception e) {}
-        } else if (sLower.endsWith("l")) {
-            try { qty = Double.parseDouble(sLower.replace("l", "")) * 1000.0; } catch (Exception e) {}
-        }
-        
-        double pricePerUnit = 0.05;
-        if (cat.contains("rice")) pricePerUnit = 0.08;
-        else if (cat.contains("atta")) pricePerUnit = 0.06;
-        else if (cat.contains("salt")) pricePerUnit = 0.03;
-        else if (cat.contains("ghee")) pricePerUnit = 0.75;
-        else if (cat.contains("oil")) pricePerUnit = 0.15;
-        else if (cat.contains("sugar")) pricePerUnit = 0.045;
-        else if (cat.contains("milk")) pricePerUnit = 0.065;
-        else if (cat.contains("curd")) pricePerUnit = 0.08;
-        else if (cat.contains("spice") || cat.contains("masala")) pricePerUnit = 0.50;
-        else if (cat.contains("chicken")) pricePerUnit = 0.25;
-        else if (cat.contains("onion") || cat.contains("tomato") || cat.contains("potato")) pricePerUnit = 0.06;
-        
-        double estPrice = qty * pricePerUnit;
-        if (!"store brand".equals(b)) {
-            estPrice *= 1.1;
-        }
-        return Math.round(estPrice * 2.0) / 2.0;
-    }
-
-    private List<String> detectBrands(String category, String name) {
-        if (category == null) return Collections.singletonList("Store Brand");
-        String cat = category.toLowerCase().trim();
-        String lowerName = name != null ? name.toLowerCase().trim() : "";
-        
-        List<String> storeBrandOnlyList = Arrays.asList(
-            "tomato", "onion", "potato", "brinjal", "eggplant", "carrot", "beetroot", 
-            "cabbage", "cauliflower", "banana", "apple", "orange", "mint", "coriander", "chilli", "chili"
-        );
-        for (String item : storeBrandOnlyList) {
-            if (lowerName.contains(item)) {
-                return Collections.singletonList("Store Brand");
-            }
-        }
-        
-        if (cat.contains("rice")) {
-            return Arrays.asList("India Gate", "Daawat", "Fortune");
-        } else if (cat.contains("atta") || cat.contains("flour")) {
-            return Arrays.asList("Aashirvaad", "Pillsbury", "Annapurna");
-        } else if (cat.contains("salt")) {
-            return Arrays.asList("Tata", "Aashirvaad", "Catch");
-        } else if (cat.contains("ghee")) {
-            return Arrays.asList("Amul", "Aashirvaad", "Milky Mist", "Nandini");
-        } else if (cat.contains("oil")) {
-            return Arrays.asList("Fortune", "Gemini", "Saffola", "Dhara");
-        } else if (cat.contains("sugar")) {
-            return Arrays.asList("Madhur", "Trust", "Dhampure");
-        } else if (cat.contains("milk")) {
-            return Arrays.asList("Aavin", "Amul", "Heritage", "Nandini");
-        } else if (cat.contains("curd")) {
-            return Arrays.asList("Aavin", "Amul", "Heritage", "Milky Mist");
-        } else if (cat.contains("spice") || cat.contains("masala")) {
-            return Arrays.asList("Aachi", "Sakthi", "Everest", "MTR");
-        } else if (cat.contains("chicken")) {
-            return Collections.singletonList("Suguna");
-        }
-        
-        return Collections.singletonList("Store Brand");
-    }
-
-    private List<String> detectPackSizes(String category, String variety, String name) {
-        if (category == null) return Arrays.asList("500g", "1kg");
-        String cat = category.toLowerCase().trim();
-        String lowerName = name != null ? name.toLowerCase().trim() : "";
-        
-        if (cat.contains("rice")) {
-            return Arrays.asList("1kg", "5kg", "10kg");
-        } else if (cat.contains("atta") || cat.contains("flour")) {
-            return Arrays.asList("1kg", "5kg", "10kg");
-        } else if (cat.contains("salt")) {
-            return Arrays.asList("100g", "500g", "1kg");
-        } else if (cat.contains("ghee")) {
-            return Arrays.asList("200ml", "500ml", "1L");
-        } else if (cat.contains("oil")) {
-            return Arrays.asList("500ml", "1L", "5L");
-        } else if (cat.contains("sugar")) {
-            return Arrays.asList("1kg", "5kg");
-        } else if (cat.contains("milk")) {
-            return Arrays.asList("500ml", "1L");
-        } else if (cat.contains("curd")) {
-            return Arrays.asList("200g", "500g");
-        } else if (cat.contains("spice") || cat.contains("masala")) {
-            return Arrays.asList("50g", "100g", "250g");
-        } else if (cat.contains("chicken")) {
-            if (lowerName.contains("pieces") || lowerName.contains("pcs")) {
-                return Arrays.asList("4 pcs", "10 pcs");
-            }
-            return Arrays.asList("500g", "1kg");
-        } else if (cat.contains("brinjal") || cat.contains("eggplant") || cat.contains("okra") || cat.contains("lady")) {
-            if (lowerName.contains("piece") || lowerName.contains("pcs") || lowerName.contains("piece")) {
-                return Arrays.asList("1 piece", "4 pcs", "10 pcs");
-            }
-            return Arrays.asList("500g", "1kg");
-        }
-        
-        return Arrays.asList("500g", "1kg");
-    }
-
-    private String detectCategory(String name) {
-        if (name == null) return "Other";
-        String lower = name.toLowerCase();
-        if (lower.contains("rice")) return "Rice";
-        if (lower.contains("atta") || lower.contains("flour")) return "Atta";
-        if (lower.contains("salt")) return "Salt";
-        if (lower.contains("eggplant") || lower.contains("brinjal")) return "Brinjal";
-        if (lower.contains("lady finger") || lower.contains("okra") || lower.contains("ladyfinger")) return "Okra";
-        if (lower.contains("coriander") || lower.contains("cilantro")) return "Coriander Leaves";
-        if (lower.contains("onion")) return "Onion";
-        if (lower.contains("tomato")) return "Tomato";
-        if (lower.contains("potato")) return "Potato";
-        if (lower.contains("chilli") || lower.contains("chili")) return "Green Chilli";
-        if (lower.contains("curd") || lower.contains("yogurt")) return "Curd";
-        if (lower.contains("ghee")) return "Ghee";
-        if (lower.contains("ginger garlic")) return "Ginger Garlic Paste";
-        if (lower.contains("biryani masala")) return "Biryani Masala";
-        if (lower.contains("oil")) return "Oil";
-        if (lower.contains("chicken")) return "Chicken";
-        if (lower.contains("milk")) return "Milk";
-        if (lower.contains("sugar")) return "Sugar";
-        return "Other";
-    }
-
-    private String detectVariety(String name) {
-        if (name == null) return null;
-        String lower = name.toLowerCase();
-        if (lower.contains("small")) return "small";
-        if (lower.contains("big")) return "big";
-        if (lower.contains("nattu")) return "nattu";
-        if (lower.contains("ponda")) return "ponda";
-        if (lower.contains("basmati")) return "basmati";
-        if (lower.contains("sona masoori")) return "sona masoori";
-        if (lower.contains("ponni")) return "ponni";
-        if (lower.contains("brown")) return "brown";
-        if (lower.contains("raw")) return "raw";
-        if (lower.contains("idli")) return "idli";
-        if (lower.contains("jeera samba") || lower.contains("seeraga samba")) return "jeera samba";
-        if (lower.contains("matta")) return "matta";
-        return null;
-    }
 
     private void cleanRawNameWithQuantity(Ingredient ing) {
         if (ing.getRecipeQuantity() == null || ing.getRecipeQuantity() == 0.0) {
@@ -1355,6 +980,171 @@ public class GeminiRecipeService implements RecipeService {
             ));
         }
         return result;
+    }
+    private void injectMissingEssentials(List<Ingredient> ingredients, String transcript, Integer servings) {
+        if (ingredients == null) return;
+        
+        boolean hasSalt = false;
+        boolean hasOil = false;
+        
+        for (Ingredient ing : ingredients) {
+            String name = ing.getName() != null ? ing.getName().toLowerCase() : "";
+            if (name.contains("salt")) {
+                hasSalt = true;
+            }
+            if (name.contains("oil") || name.contains("butter") || name.contains("ghee") || name.contains("margarine")) {
+                hasOil = true;
+            }
+        }
+        
+        if (!hasSalt) {
+            Ingredient salt = new Ingredient(
+                "salt",
+                null,
+                null,
+                true,
+                "speech",
+                0.95
+            );
+            ingredients.add(salt);
+        }
+        
+        if (!hasOil) {
+            Ingredient oil = new Ingredient(
+                "oil",
+                null,
+                null,
+                true,
+                "speech",
+                0.95
+            );
+            ingredients.add(oil);
+        }
+    }
+
+    private List<Ingredient> deduplicateIngredients(List<Ingredient> ingredients) {
+        if (ingredients == null || ingredients.isEmpty()) {
+            return ingredients;
+        }
+        
+        List<Ingredient> deduplicated = new ArrayList<>();
+        Map<String, Ingredient> nameToIngredient = new LinkedHashMap<>();
+        
+        for (Ingredient ing : ingredients) {
+            if (ing == null || ing.getName() == null) {
+                continue;
+            }
+            String normalizedName = ing.getName().trim().toLowerCase();
+            if (nameToIngredient.containsKey(normalizedName)) {
+                Ingredient existing = nameToIngredient.get(normalizedName);
+                mergeIngredients(existing, ing);
+            } else {
+                nameToIngredient.put(normalizedName, ing);
+                deduplicated.add(ing);
+            }
+        }
+        
+        return deduplicated;
+    }
+
+    private void mergeIngredients(Ingredient existing, Ingredient incoming) {
+        // 1. Recipe Quantity and Unit
+        if (existing.getRecipeQuantity() == null) {
+            existing.setRecipeQuantity(incoming.getRecipeQuantity());
+            existing.setRecipeUnit(incoming.getRecipeUnit());
+        } else if (incoming.getRecipeQuantity() != null) {
+            double convertedIncoming = convertRecipeQuantity(incoming.getRecipeQuantity(), incoming.getRecipeUnit(), existing.getRecipeUnit());
+            existing.setRecipeQuantity(existing.getRecipeQuantity() + convertedIncoming);
+            existing.setRecipeQuantity(Math.round(existing.getRecipeQuantity() * 100.0) / 100.0);
+        }
+
+        // 2. Quantity and Unit (metric values)
+        if (existing.getQuantity() == null) {
+            existing.setQuantity(incoming.getQuantity());
+            existing.setUnit(incoming.getUnit());
+        } else if (incoming.getQuantity() != null) {
+            double convertedIncomingMetric = convertRecipeQuantity(incoming.getQuantity(), incoming.getUnit(), existing.getUnit());
+            existing.setQuantity(existing.getQuantity() + convertedIncomingMetric);
+            existing.setQuantity(Math.round(existing.getQuantity() * 100.0) / 100.0);
+        }
+
+        // 3. Estimated: false if any is false (i.e. only true if both are true/estimated)
+        existing.setEstimated(existing.isEstimated() && incoming.isEstimated());
+
+        // 4. Source
+        String src1 = existing.getSource();
+        String src2 = incoming.getSource();
+        Set<String> mergedSources = new LinkedHashSet<>();
+        if (src1 != null) {
+            for (String s : src1.split("\\+")) {
+                String trimmed = s.trim();
+                if (!trimmed.isEmpty()) mergedSources.add(trimmed);
+            }
+        }
+        if (src2 != null) {
+            for (String s : src2.split("\\+")) {
+                String trimmed = s.trim();
+                if (!trimmed.isEmpty()) mergedSources.add(trimmed);
+            }
+        }
+        if (!mergedSources.isEmpty()) {
+            existing.setSource(String.join("+", mergedSources));
+        } else {
+            existing.setSource("speech"); // default fallback
+        }
+
+        // 5. Confidence: combine confidences
+        double c1 = existing.getConfidence();
+        double c2 = incoming.getConfidence();
+        if (c1 <= 0.0) c1 = 0.95;
+        if (c2 <= 0.0) c2 = 0.95;
+        double combined = 1.0 - (1.0 - c1) * (1.0 - c2);
+        existing.setConfidence(Math.round(combined * 100.0) / 100.0);
+    }
+
+    private double convertRecipeQuantity(double qty, String fromUnit, String toUnit) {
+        if (fromUnit == null || toUnit == null) return qty;
+        String from = fromUnit.toLowerCase().trim();
+        String to = toUnit.toLowerCase().trim();
+        if (from.equals(to)) return qty;
+
+        // normalize units to singular forms
+        from = normalizeUnitForConversion(from);
+        to = normalizeUnitForConversion(to);
+
+        if (from.equals(to)) return qty;
+
+        // Common volume and weight conversions
+        if (from.equals("tablespoon") && to.equals("teaspoon")) return qty * 3.0;
+        if (from.equals("teaspoon") && to.equals("tablespoon")) return qty / 3.0;
+
+        if (from.equals("cup") && to.equals("tablespoon")) return qty * 16.0;
+        if (from.equals("tablespoon") && to.equals("cup")) return qty / 16.0;
+
+        if (from.equals("cup") && to.equals("teaspoon")) return qty * 48.0;
+        if (from.equals("teaspoon") && to.equals("cup")) return qty / 48.0;
+
+        if (from.equals("kg") && to.equals("g")) return qty * 1000.0;
+        if (from.equals("g") && to.equals("kg")) return qty / 1000.0;
+
+        if (from.equals("l") && to.equals("ml")) return qty * 1000.0;
+        if (from.equals("ml") && to.equals("l")) return qty / 1000.0;
+
+        return qty; // fallback if not convertible
+    }
+
+    private String normalizeUnitForConversion(String unit) {
+        if (unit == null) return "";
+        unit = unit.toLowerCase().trim();
+        if (unit.equals("tbsp") || unit.equals("tablespoons")) return "tablespoon";
+        if (unit.equals("tsp") || unit.equals("teaspoons")) return "teaspoon";
+        if (unit.equals("cups")) return "cup";
+        if (unit.equals("grams")) return "g";
+        if (unit.equals("kilograms")) return "kg";
+        if (unit.equals("milliliters")) return "ml";
+        if (unit.equals("liters")) return "l";
+        if (unit.equals("pieces") || unit.equals("pcs")) return "piece";
+        return unit;
     }
 
     private static class ParsedIngredient {

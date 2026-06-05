@@ -46,6 +46,12 @@ public class CartServiceImpl implements CartService {
             }
         }
 
+        if (processedIngredients != null) {
+            for (Ingredient ing : processedIngredients) {
+                enrichIngredient(ing);
+            }
+        }
+
         List<CartItem> items = new ArrayList<>();
         if (processedIngredients != null) {
             for (int i = 0; i < processedIngredients.size(); i++) {
@@ -498,5 +504,391 @@ public class CartServiceImpl implements CartService {
             name = name.replace(word, "").trim();
         }
         return name.trim();
+    }
+
+    private void enrichIngredient(Ingredient ing) {
+        if (ing == null) return;
+        
+        if (ing.getCategory() == null || ing.getCategory().isEmpty()) {
+            ing.setCategory(detectCategory(ing.getName()));
+        }
+        
+        if (ing.getVariety() == null || ing.getVariety().isEmpty()) {
+            ing.setVariety(detectVariety(ing.getName()));
+        }
+        
+        if (ing.getRecommendedBrands() == null || ing.getRecommendedBrands().isEmpty()) {
+            ing.setRecommendedBrands(detectBrands(ing.getCategory(), ing.getName()));
+        }
+        
+        if (ing.getRecommendedPackSizes() == null || ing.getRecommendedPackSizes().isEmpty()) {
+            ing.setRecommendedPackSizes(detectPackSizes(ing.getCategory(), ing.getVariety(), ing.getName()));
+        }
+        
+        if (ing.getProducts() == null || ing.getProducts().isEmpty()) {
+            List<StoreProduct> prodOpts = new ArrayList<>();
+            List<String> productNames = getCategoryProductNames(ing.getCategory());
+            for (String pName : productNames) {
+                for (String b : ing.getRecommendedBrands()) {
+                    for (String s : ing.getRecommendedPackSizes()) {
+                        double price = estimateFallbackPrice(ing.getCategory(), b, s, pName);
+                        String id = ing.getCategory().toLowerCase().replace(" ", "_") + "_" + (prodOpts.size() + 1);
+                        prodOpts.add(new StoreProduct(id, pName, b, s, price, ing.getCategory()));
+                    }
+                }
+            }
+            ing.setProducts(prodOpts);
+        }
+    }
+
+    private List<String> getCategoryProductNames(String category) {
+        if (category == null) return Collections.emptyList();
+        String cat = category.toLowerCase().trim();
+        switch (cat) {
+            case "rice":
+                return Arrays.asList("Basmati Rice", "Sona Masoori Rice", "Ponni Rice", "Brown Rice", "Raw Rice", "Idli Rice", "Jeera Samba Rice", "Matta Rice", "Rice");
+            case "atta":
+                return Collections.singletonList("Atta");
+            case "salt":
+                return Collections.singletonList("Salt");
+            case "onion":
+                return Arrays.asList("Onion", "Small Onion", "Big Onion");
+            case "tomato":
+                return Arrays.asList("Tomato", "Nattu Tomato", "Ponda Tomato");
+            case "potato":
+                return Collections.singletonList("Potato");
+            case "brinjal":
+                return Collections.singletonList("Eggplant");
+            case "okra":
+                return Arrays.asList("Okra", "Lady Finger");
+            case "coriander leaves":
+                return Arrays.asList("Cilantro", "Coriander Leaves");
+            case "oil":
+                return Collections.singletonList("Cooking Oil");
+            case "chicken":
+                return Arrays.asList("Fresh Chicken", "Fresh Chicken Legs");
+            case "milk":
+                return Collections.singletonList("Fresh Milk");
+            case "curd":
+                return Collections.singletonList("Fresh Curd");
+            case "sugar":
+                return Collections.singletonList("Sugar");
+            case "ghee":
+                return Collections.singletonList("Pure Ghee");
+            case "ginger garlic paste":
+                return Collections.singletonList("Ginger Garlic Paste");
+            case "biryani masala":
+                return Collections.singletonList("Biryani Masala");
+            case "spices":
+                return Arrays.asList("Garam Masala", "Turmeric Powder", "Chilli Powder", "Sambar Powder");
+            default:
+                return Collections.singletonList(category);
+        }
+    }
+
+    private double estimateFallbackPrice(String category, String brand, String size, String productName) {
+        if (category == null || brand == null || size == null || productName == null) return 50.0;
+        String cat = category.toLowerCase().trim();
+        String b = brand.toLowerCase().trim();
+        String s = size.toLowerCase().trim();
+        String pName = productName.toLowerCase().trim();
+
+        if (cat.contains("rice")) {
+            if (pName.contains("basmati")) {
+                if (b.contains("india gate")) {
+                    if (s.equals("1kg")) return 140.0;
+                    if (s.equals("5kg")) return 680.0;
+                }
+                if (b.contains("daawat") && s.equals("1kg")) return 130.0;
+                if (b.contains("fortune") && s.equals("1kg")) return 125.0;
+            }
+            if (pName.contains("sona masoori")) {
+                if (b.contains("fortune") && s.equals("1kg")) return 65.0;
+                if (b.contains("aashirvaad") && s.equals("1kg")) return 70.0;
+            }
+            if (pName.contains("ponni") && b.contains("ponni") && s.equals("1kg")) return 55.0;
+            if (pName.contains("brown") && b.contains("24 mantra") && s.equals("1kg")) return 90.0;
+            if (pName.contains("raw") && b.contains("store") && s.equals("1kg")) return 50.0;
+            if (pName.contains("idli") && b.contains("local") && s.equals("1kg")) return 45.0;
+            if (pName.contains("jeera") && b.contains("local") && s.equals("1kg")) return 95.0;
+            if (pName.contains("matta") && b.contains("double") && s.equals("1kg")) return 80.0;
+            if (pName.equals("rice") && b.contains("store")) {
+                if (s.equals("1kg")) return 55.0;
+                if (s.equals("5kg")) return 250.0;
+                if (s.equals("10kg")) return 480.0;
+            }
+        }
+        
+        if (cat.contains("atta")) {
+            if (b.contains("aashirvaad")) {
+                if (s.equals("1kg")) return 60.0;
+                if (s.equals("5kg")) return 270.0;
+            }
+            if (b.contains("pillsbury")) {
+                if (s.equals("1kg")) return 65.0;
+                if (s.equals("5kg")) return 290.0;
+            }
+            if (b.contains("annapurna") && s.equals("1kg")) return 58.0;
+            if (b.contains("store") && s.equals("1kg")) return 50.0;
+        }
+        
+        if (cat.contains("salt")) {
+            if (b.contains("tata")) {
+                if (s.equals("100g")) return 10.0;
+                if (s.equals("500g")) return 20.0;
+                if (s.equals("1kg")) return 30.0;
+            }
+            if (b.contains("store") && s.equals("1kg")) return 25.0;
+        }
+        
+        if (cat.contains("onion")) {
+            if (pName.equals("onion")) {
+                if (s.equals("500g")) return 25.0;
+                if (s.equals("1kg")) return 45.0;
+            }
+            if (pName.contains("small") && s.equals("500g")) return 40.0;
+            if (pName.contains("big") && s.equals("500g")) return 25.0;
+        }
+        
+        if (cat.contains("tomato")) {
+            if (pName.equals("tomato")) {
+                if (s.equals("500g")) return 30.0;
+                if (s.equals("1kg")) return 55.0;
+            }
+            if (pName.contains("nattu") && s.equals("500g")) return 35.0;
+            if (pName.contains("ponda") && s.equals("500g")) return 30.0;
+        }
+        
+        if (cat.contains("potato") && b.contains("store") && s.equals("1kg")) return 40.0;
+        
+        if (cat.contains("brinjal") || cat.contains("eggplant")) {
+            if (s.equals("500g")) return 40.0;
+            if (s.equals("1kg")) return 75.0;
+            if (s.equals("1 piece")) return 15.0;
+            if (s.equals("4 pcs")) return 55.0;
+        }
+        
+        if (cat.contains("okra") || cat.contains("lady")) {
+            if (pName.contains("okra")) {
+                if (s.equals("500g")) return 35.0;
+                if (s.equals("1kg")) return 65.0;
+                if (s.equals("10 pcs")) return 10.0;
+                if (s.equals("30 pcs")) return 25.0;
+            }
+            if (pName.contains("lady")) {
+                if (s.equals("500g")) return 35.0;
+                if (s.equals("1kg")) return 65.0;
+            }
+        }
+        
+        if (cat.contains("coriander") || cat.contains("cilantro")) {
+            if (s.equals("100g")) return 15.0;
+            if (s.equals("250g")) return 30.0;
+            if (s.equals("1 bunch")) return 10.0;
+            if (s.equals("3 bunches")) return 25.0;
+        }
+        
+        if (cat.contains("green chilli") && s.equals("100g")) return 15.0;
+        
+        if (cat.contains("oil")) {
+            if (b.contains("fortune")) {
+                if (s.equals("500ml")) return 80.0;
+                if (s.equals("1l")) return 150.0;
+                if (s.equals("5l")) return 700.0;
+            }
+        }
+        
+        if (cat.contains("chicken")) {
+            if (b.contains("suguna")) {
+                if (s.equals("500g")) return 130.0;
+                if (s.equals("1kg")) return 250.0;
+                if (s.equals("4 pcs") || pName.contains("legs")) return 180.0;
+            }
+        }
+        
+        if (cat.contains("milk")) {
+            if (s.equals("1l")) {
+                if (b.contains("amul")) return 68.0;
+                if (b.contains("aavin")) return 62.0;
+                if (b.contains("nandini")) return 60.0;
+            }
+            if (s.equals("500ml") && b.contains("heritage")) return 35.0;
+        }
+        
+        if (cat.contains("curd")) {
+            if (s.equals("500g")) {
+                if (b.contains("aavin")) return 38.0;
+                if (b.contains("amul")) return 42.0;
+            }
+        }
+        
+        if (cat.contains("sugar")) {
+            if (s.equals("1kg")) {
+                if (b.contains("madhur")) return 45.0;
+                if (b.contains("trust")) return 50.0;
+                if (b.contains("dhampure")) return 52.0;
+            }
+        }
+        
+        if (cat.contains("ghee")) {
+            if (s.equals("200ml")) {
+                if (b.contains("amul")) return 145.0;
+                if (b.contains("aashirvaad")) return 155.0;
+            }
+        }
+        
+        if (cat.contains("ginger garlic") && b.contains("aachi") && s.equals("100g")) return 20.0;
+        if (cat.contains("biryani masala") && b.contains("aachi") && s.equals("50g")) return 25.0;
+
+        double qty = 500.0;
+        String sLower = s.toLowerCase();
+        if (sLower.endsWith("kg")) {
+            try { qty = Double.parseDouble(sLower.replace("kg", "")) * 1000.0; } catch (Exception e) {}
+        } else if (sLower.endsWith("g")) {
+            try { qty = Double.parseDouble(sLower.replace("g", "")); } catch (Exception e) {}
+        } else if (sLower.endsWith("ml")) {
+            try { qty = Double.parseDouble(sLower.replace("ml", "")); } catch (Exception e) {}
+        } else if (sLower.endsWith("l")) {
+            try { qty = Double.parseDouble(sLower.replace("l", "")) * 1000.0; } catch (Exception e) {}
+        }
+        
+        double pricePerUnit = 0.05;
+        if (cat.contains("rice")) pricePerUnit = 0.08;
+        else if (cat.contains("atta")) pricePerUnit = 0.06;
+        else if (cat.contains("salt")) pricePerUnit = 0.03;
+        else if (cat.contains("ghee")) pricePerUnit = 0.75;
+        else if (cat.contains("oil")) pricePerUnit = 0.15;
+        else if (cat.contains("sugar")) pricePerUnit = 0.045;
+        else if (cat.contains("milk")) pricePerUnit = 0.065;
+        else if (cat.contains("curd")) pricePerUnit = 0.08;
+        else if (cat.contains("spice") || cat.contains("masala")) pricePerUnit = 0.50;
+        else if (cat.contains("chicken")) pricePerUnit = 0.25;
+        else if (cat.contains("onion") || cat.contains("tomato") || cat.contains("potato")) pricePerUnit = 0.06;
+        
+        double estPrice = qty * pricePerUnit;
+        if (!"store brand".equals(b)) {
+            estPrice *= 1.1;
+        }
+        return Math.round(estPrice * 2.0) / 2.0;
+    }
+
+    private List<String> detectBrands(String category, String name) {
+        if (category == null) return Collections.singletonList("Store Brand");
+        String cat = category.toLowerCase().trim();
+        String lowerName = name != null ? name.toLowerCase().trim() : "";
+        
+        List<String> storeBrandOnlyList = Arrays.asList(
+            "tomato", "onion", "potato", "brinjal", "eggplant", "carrot", "beetroot", 
+            "cabbage", "cauliflower", "banana", "apple", "orange", "mint", "coriander", "chilli", "chili"
+        );
+        for (String item : storeBrandOnlyList) {
+            if (lowerName.contains(item)) {
+                return Collections.singletonList("Store Brand");
+            }
+        }
+        
+        if (cat.contains("rice")) {
+            return Arrays.asList("India Gate", "Daawat", "Fortune");
+        } else if (cat.contains("atta") || cat.contains("flour")) {
+            return Arrays.asList("Aashirvaad", "Pillsbury", "Annapurna");
+        } else if (cat.contains("salt")) {
+            return Arrays.asList("Tata", "Aashirvaad", "Catch");
+        } else if (cat.contains("ghee")) {
+            return Arrays.asList("Amul", "Aashirvaad", "Milky Mist", "Nandini");
+        } else if (cat.contains("oil")) {
+            return Arrays.asList("Fortune", "Gemini", "Saffola", "Dhara");
+        } else if (cat.contains("sugar")) {
+            return Arrays.asList("Madhur", "Trust", "Dhampure");
+        } else if (cat.contains("milk")) {
+            return Arrays.asList("Aavin", "Amul", "Heritage", "Nandini");
+        } else if (cat.contains("curd")) {
+            return Arrays.asList("Aavin", "Amul", "Heritage", "Milky Mist");
+        } else if (cat.contains("spice") || cat.contains("masala")) {
+            return Arrays.asList("Aachi", "Sakthi", "Everest", "MTR");
+        } else if (cat.contains("chicken")) {
+            return Collections.singletonList("Suguna");
+        }
+        
+        return Collections.singletonList("Store Brand");
+    }
+
+    private List<String> detectPackSizes(String category, String variety, String name) {
+        if (category == null) return Arrays.asList("500g", "1kg");
+        String cat = category.toLowerCase().trim();
+        String lowerName = name != null ? name.toLowerCase().trim() : "";
+        
+        if (cat.contains("rice")) {
+            return Arrays.asList("1kg", "5kg", "10kg");
+        } else if (cat.contains("atta") || cat.contains("flour")) {
+            return Arrays.asList("1kg", "5kg", "10kg");
+        } else if (cat.contains("salt")) {
+            return Arrays.asList("100g", "500g", "1kg");
+        } else if (cat.contains("ghee")) {
+            return Arrays.asList("200ml", "500ml", "1L");
+        } else if (cat.contains("oil")) {
+            return Arrays.asList("500ml", "1L", "5L");
+        } else if (cat.contains("sugar")) {
+            return Arrays.asList("1kg", "5kg");
+        } else if (cat.contains("milk")) {
+            return Arrays.asList("500ml", "1L");
+        } else if (cat.contains("curd")) {
+            return Arrays.asList("200g", "500g");
+        } else if (cat.contains("spice") || cat.contains("masala")) {
+            return Arrays.asList("50g", "100g", "250g");
+        } else if (cat.contains("chicken")) {
+            if (lowerName.contains("pieces") || lowerName.contains("pcs")) {
+                return Arrays.asList("4 pcs", "10 pcs");
+            }
+            return Arrays.asList("500g", "1kg");
+        } else if (cat.contains("brinjal") || cat.contains("eggplant") || cat.contains("okra") || cat.contains("lady")) {
+            if (lowerName.contains("piece") || lowerName.contains("pcs") || lowerName.contains("piece")) {
+                return Arrays.asList("1 piece", "4 pcs", "10 pcs");
+            }
+            return Arrays.asList("500g", "1kg");
+        }
+        
+        return Arrays.asList("500g", "1kg");
+    }
+
+    private String detectCategory(String name) {
+        if (name == null) return "Other";
+        String lower = name.toLowerCase();
+        if (lower.contains("rice")) return "Rice";
+        if (lower.contains("atta") || lower.contains("flour")) return "Atta";
+        if (lower.contains("salt")) return "Salt";
+        if (lower.contains("eggplant") || lower.contains("brinjal")) return "Brinjal";
+        if (lower.contains("lady finger") || lower.contains("okra") || lower.contains("ladyfinger")) return "Okra";
+        if (lower.contains("coriander") || lower.contains("cilantro")) return "Coriander Leaves";
+        if (lower.contains("onion")) return "Onion";
+        if (lower.contains("tomato")) return "Tomato";
+        if (lower.contains("potato")) return "Potato";
+        if (lower.contains("chilli") || lower.contains("chili")) return "Green Chilli";
+        if (lower.contains("curd") || lower.contains("yogurt")) return "Curd";
+        if (lower.contains("ghee")) return "Ghee";
+        if (lower.contains("ginger garlic")) return "Ginger Garlic Paste";
+        if (lower.contains("biryani masala")) return "Biryani Masala";
+        if (lower.contains("oil")) return "Oil";
+        if (lower.contains("chicken")) return "Chicken";
+        if (lower.contains("milk")) return "Milk";
+        if (lower.contains("sugar")) return "Sugar";
+        return "Other";
+    }
+
+    private String detectVariety(String name) {
+        if (name == null) return null;
+        String lower = name.toLowerCase();
+        if (lower.contains("small")) return "small";
+        if (lower.contains("big")) return "big";
+        if (lower.contains("nattu")) return "nattu";
+        if (lower.contains("ponda")) return "ponda";
+        if (lower.contains("basmati")) return "basmati";
+        if (lower.contains("sona masoori")) return "sona masoori";
+        if (lower.contains("ponni")) return "ponni";
+        if (lower.contains("brown")) return "brown";
+        if (lower.contains("raw")) return "raw";
+        if (lower.contains("idli")) return "idli";
+        if (lower.contains("jeera samba") || lower.contains("seeraga samba")) return "jeera samba";
+        if (lower.contains("matta")) return "matta";
+        return null;
     }
 }

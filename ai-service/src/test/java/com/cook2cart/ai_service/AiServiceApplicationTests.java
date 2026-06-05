@@ -201,7 +201,7 @@ class AiServiceApplicationTests {
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(2, ingredients.size());
+        assertEquals(4, ingredients.size());
 
         // Verify onion is merged and source combined
         com.cook2cart.ai_service.dto.Ingredient onion = ingredients.stream()
@@ -220,6 +220,24 @@ class AiServiceApplicationTests {
         assertEquals("speech+vision", greenChilli.getSource());
         // combined confidence: 1 - (1-0.95)*(1-0.85) = 1 - 0.05*0.15 = 1 - 0.0075 = 0.9925 -> 0.99
         assertEquals(0.99, greenChilli.getConfidence());
+
+        // Verify salt is injected and estimated
+        com.cook2cart.ai_service.dto.Ingredient salt = ingredients.stream()
+                .filter(i -> "salt".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(salt);
+        assertTrue(salt.isEstimated());
+        assertEquals(4.0, salt.getQuantity());
+        assertEquals("g", salt.getUnit());
+
+        // Verify oil is injected and estimated
+        com.cook2cart.ai_service.dto.Ingredient oil = ingredients.stream()
+                .filter(i -> "oil".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(oil);
+        assertTrue(oil.isEstimated());
+        assertEquals(30.0, oil.getQuantity());
+        assertEquals("ml", oil.getUnit());
     }
 
     @Test
@@ -236,7 +254,7 @@ class AiServiceApplicationTests {
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(3, ingredients.size());
+        assertEquals(4, ingredients.size());
 
         // Spaghetti: speech
         com.cook2cart.ai_service.dto.Ingredient spaghetti = ingredients.stream()
@@ -264,6 +282,15 @@ class AiServiceApplicationTests {
         assertEquals("vision", basil.getSource());
         assertEquals(0.85, basil.getConfidence());
         assertTrue(basil.isEstimated());
+
+        // Salt: injected and estimated
+        com.cook2cart.ai_service.dto.Ingredient salt = ingredients.stream()
+                .filter(i -> "salt".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(salt);
+        assertTrue(salt.isEstimated());
+        assertEquals(4.0, salt.getQuantity());
+        assertEquals("g", salt.getUnit());
     }
 
     @Test
@@ -280,7 +307,7 @@ class AiServiceApplicationTests {
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(2, ingredients.size());
+        assertEquals(3, ingredients.size());
 
         // Onion: vision, serves 3 -> 3 * 50 = 150g
         com.cook2cart.ai_service.dto.Ingredient onion = ingredients.stream()
@@ -301,6 +328,15 @@ class AiServiceApplicationTests {
         assertTrue(oil.isEstimated());
         assertEquals(45.0, oil.getQuantity());
         assertEquals("ml", oil.getUnit());
+
+        // Salt: injected and estimated for serves 3 -> 6.0g
+        com.cook2cart.ai_service.dto.Ingredient salt = ingredients.stream()
+                .filter(i -> "salt".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(salt);
+        assertTrue(salt.isEstimated());
+        assertEquals(6.0, salt.getQuantity());
+        assertEquals("g", salt.getUnit());
     }
 
     @Test
@@ -318,8 +354,8 @@ class AiServiceApplicationTests {
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
         
-        // "masala" should be removed, and 4 constituent ingredients should be inferred
-        assertEquals(4, ingredients.size());
+        // "masala" should be removed, and 4 constituent ingredients should be inferred, plus salt and oil injected
+        assertEquals(6, ingredients.size());
         
         // Assert absence of masala
         assertTrue(ingredients.stream().noneMatch(i -> i.getName().contains("masala")));
@@ -338,6 +374,8 @@ class AiServiceApplicationTests {
         assertTrue(ingredients.stream().anyMatch(i -> "cumin seeds".equals(i.getName())));
         assertTrue(ingredients.stream().anyMatch(i -> "cloves".equals(i.getName())));
         assertTrue(ingredients.stream().anyMatch(i -> "cinnamon".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "salt".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "oil".equals(i.getName())));
     }
 
     @Test
@@ -358,7 +396,7 @@ class AiServiceApplicationTests {
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(2, ingredients.size());
+        assertEquals(4, ingredients.size());
     }
 
     @Test
@@ -375,7 +413,7 @@ class AiServiceApplicationTests {
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(6, ingredients.size());
+        assertEquals(8, ingredients.size());
         
         // Assertions for synonyms/translations
         assertTrue(ingredients.stream().anyMatch(i -> "lady finger".equals(i.getName())));
@@ -386,5 +424,80 @@ class AiServiceApplicationTests {
         // Assertions for varieties
         assertTrue(ingredients.stream().anyMatch(i -> "small onion".equals(i.getName())));
         assertTrue(ingredients.stream().anyMatch(i -> "nattu tomato".equals(i.getName())));
+
+        // Assertions for injected essentials
+        assertTrue(ingredients.stream().anyMatch(i -> "salt".equals(i.getName())));
+        assertTrue(ingredients.stream().anyMatch(i -> "oil".equals(i.getName())));
+    }
+
+    @Test
+    void testParseIngredients_InjectsEssentials() {
+        com.cook2cart.ai_service.dto.Ingredient egg = new com.cook2cart.ai_service.dto.Ingredient("egg", 2.0, "pcs", false, "speech", 0.95);
+        List<com.cook2cart.ai_service.dto.Ingredient> input = Arrays.asList(egg);
+
+        List<com.cook2cart.ai_service.dto.Ingredient> result = recipeService.parseIngredients(input, 3);
+        assertNotNull(result);
+        // Egg + Salt + Oil = 3 ingredients
+        assertEquals(3, result.size());
+
+        // Verify egg properties
+        com.cook2cart.ai_service.dto.Ingredient eggRes = result.stream()
+                .filter(i -> "egg".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(eggRes);
+
+        // Verify salt properties estimated for 3 servings
+        com.cook2cart.ai_service.dto.Ingredient salt = result.stream()
+                .filter(i -> "salt".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(salt);
+        assertTrue(salt.isEstimated());
+        assertEquals(6.0, salt.getQuantity());
+        assertEquals("g", salt.getUnit());
+
+        // Verify oil properties estimated for 3 servings
+        com.cook2cart.ai_service.dto.Ingredient oil = result.stream()
+                .filter(i -> "oil".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(oil);
+        assertTrue(oil.isEstimated());
+        assertEquals(45.0, oil.getQuantity());
+        assertEquals("ml", oil.getUnit());
+    }
+
+    @Test
+    void testParseIngredients_DeduplicatesDuplicates() {
+        com.cook2cart.ai_service.dto.Ingredient salt1 = new com.cook2cart.ai_service.dto.Ingredient(
+            "salt", 1.0, "tablespoon", 1.0, "g", true, "speech", 0.8
+        );
+        com.cook2cart.ai_service.dto.Ingredient salt2 = new com.cook2cart.ai_service.dto.Ingredient(
+            "salt", 0.5, "teaspoon", 3.0, "g", true, "speech", 0.8
+        );
+        com.cook2cart.ai_service.dto.Ingredient flour = new com.cook2cart.ai_service.dto.Ingredient(
+            "all-purpose flour", 1.5, "cup", 180.0, "g", false, "speech", 0.95
+        );
+        
+        List<com.cook2cart.ai_service.dto.Ingredient> input = Arrays.asList(salt1, salt2, flour);
+        List<com.cook2cart.ai_service.dto.Ingredient> result = recipeService.parseIngredients(input, 2);
+        
+        assertNotNull(result);
+        // Should contain salt (merged), all-purpose flour, oil (injected)
+        assertEquals(3, result.size());
+        
+        // Find merged salt
+        com.cook2cart.ai_service.dto.Ingredient salt = result.stream()
+                .filter(i -> "salt".equals(i.getName()))
+                .findFirst().orElse(null);
+        assertNotNull(salt);
+        // 1.0 tablespoon + 0.5 teaspoon = 1.17 tablespoon
+        assertEquals(1.17, salt.getRecipeQuantity());
+        assertEquals("tablespoon", salt.getRecipeUnit());
+        
+        // metric quantity: 1.0g + 3.0g = 4.0g
+        assertEquals(4.0, salt.getQuantity());
+        assertEquals("g", salt.getUnit());
+        
+        assertTrue(salt.isEstimated());
+        assertEquals(0.96, salt.getConfidence()); // 1 - 0.2 * 0.2 = 0.96
     }
 }

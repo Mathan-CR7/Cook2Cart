@@ -1,32 +1,59 @@
 package com.cook2cart.video_service.service;
 
 import com.cook2cart.video_service.dto.VideoResponseDTO;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 public class VideoService {
 
+    private static final Pattern YOUTUBE_VIDEO_ID_PATTERN =
+            Pattern.compile("(?:v=|/)([a-zA-Z0-9_-]{11})");
+
+    @Value("${video.output-dir}")
+    private String videoOutputDir;
+
+    @Value("${audio.output-dir}")
+    private String audioOutputDir;
+
+    private File resolvedVideoDir;
+    private File resolvedAudioDir;
+
+    @PostConstruct
+    public void init() {
+        resolvedVideoDir = Paths.get(videoOutputDir).toAbsolutePath().normalize().toFile();
+        resolvedAudioDir = Paths.get(audioOutputDir).toAbsolutePath().normalize().toFile();
+
+        if (!resolvedVideoDir.exists()) {
+            resolvedVideoDir.mkdirs();
+        }
+
+        if (!resolvedAudioDir.exists()) {
+            resolvedAudioDir.mkdirs();
+        }
+
+        log.info("Video output directory: {}", resolvedVideoDir);
+        log.info("Audio output directory: {}", resolvedAudioDir);
+    }
+
     public VideoResponseDTO processVideo(String youtubeUrl) throws Exception {
 
         log.info("Video processing started for URL: {}", youtubeUrl);
 
-        File videoDir = new File("/data/videos");
-        File audioDir = new File("/data/audio");
-
-        if (!videoDir.exists()) {
-            videoDir.mkdirs();
-        }
-
-        if (!audioDir.exists()) {
-            audioDir.mkdirs();
-        }
-
-        String videoPath = "/data/videos/recipe.mp4";
-        String audioPath = "/data/audio/recipe.wav";
+        String fileBaseName = buildFileBaseName(youtubeUrl);
+        String videoPath = new File(resolvedVideoDir, fileBaseName + ".mp4").getAbsolutePath();
+        String audioPath = new File(resolvedAudioDir, fileBaseName + ".wav").getAbsolutePath();
 
         downloadVideo(youtubeUrl, videoPath);
         extractAudio(videoPath, audioPath);
@@ -48,7 +75,7 @@ public class VideoService {
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "yt-dlp",
                 "-f",
-                "bestvideo+bestaudio/best",
+                "best[height<=480]",
                 "--merge-output-format",
                 "mp4",
                 "-o",
@@ -56,15 +83,7 @@ public class VideoService {
                 youtubeUrl
         );
 
-        processBuilder.inheritIO();
-
-        Process process = processBuilder.start();
-        int exitCode = process.waitFor();
-
-        if (exitCode != 0) {
-            log.error("Video download failed");
-            throw new RuntimeException("Video download failed");
-        }
+        runCommand("Video download", processBuilder);
 
         log.info("Video downloaded successfully: {}", outputPath);
     }
@@ -86,16 +105,57 @@ public class VideoService {
                 audioPath
         );
 
-        processBuilder.inheritIO();
+        runCommand("Audio extraction", processBuilder);
 
-        Process process = processBuilder.start();
+        log.info("Audio extracted successfully: {}", audioPath);
+    }
+
+    private void runCommand(String step, ProcessBuilder processBuilder) throws Exception {
+        processBuilder.redirectErrorStream(true);
+
+        Process process;
+        try {
+            process = processBuilder.start();
+        } catch (IOException ex) {
+            log.error("{} command could not start", step, ex);
+            throw new RuntimeException(step + " command could not start: " + ex.getMessage(), ex);
+        }
+
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int exitCode = process.waitFor();
 
         if (exitCode != 0) {
-            log.error("Audio extraction failed");
-            throw new RuntimeException("Audio extraction failed");
+            log.error("{} failed with exit code {}. Output: {}", step, exitCode, output);
+            throw new RuntimeException(step + " failed: " + summarize(output));
+        }
+    }
+
+    private String summarize(String output) {
+        if (output == null || output.isBlank()) {
+            return "No command output";
         }
 
-        log.info("Audio extracted successfully: {}", audioPath);
+        String compactOutput = output.replaceAll("\\s+", " ").trim();
+        return compactOutput.length() > 500
+                ? compactOutput.substring(0, 500) + "..."
+                : compactOutput;
+    }
+
+    private String buildFileBaseName(String youtubeUrl) {
+        String videoId = extractVideoId(youtubeUrl);
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+
+        return videoId == null
+                ? "recipe-" + uniqueSuffix
+                : videoId + "-" + uniqueSuffix;
+    }
+
+    private String extractVideoId(String youtubeUrl) {
+        if (youtubeUrl == null) {
+            return null;
+        }
+
+        Matcher matcher = YOUTUBE_VIDEO_ID_PATTERN.matcher(youtubeUrl);
+        return matcher.find() ? matcher.group(1) : null;
     }
 }

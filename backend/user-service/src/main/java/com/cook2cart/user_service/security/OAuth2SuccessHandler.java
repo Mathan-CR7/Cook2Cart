@@ -12,7 +12,9 @@ import org.springframework.security.web.authentication.AuthenticationSuccessHand
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
 
 @Component
 @RequiredArgsConstructor
@@ -20,6 +22,8 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     private final UserRepository userRepository;
     private final JwtService jwtService;
+
+    private static final String FRONTEND_LOGIN_URL = "http://localhost:5173/login";
 
     @Override
     public void onAuthenticationSuccess(
@@ -45,9 +49,15 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
         String token = jwtService.generateToken(user.getEmail());
 
-        response.setContentType("application/json");
-        response.getWriter().write(
-                "{\"token\":\"" + token + "\",\"email\":\"" + user.getEmail() + "\",\"name\":\"" + user.getName() + "\"}"
-        );
+        String redirectUrl = FRONTEND_LOGIN_URL
+                + "?token=" + encode(token)
+                + "&email=" + encode(user.getEmail())
+                + "&name=" + encode(user.getName());
+
+        response.sendRedirect(redirectUrl);
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }

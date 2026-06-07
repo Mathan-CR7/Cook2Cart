@@ -1,6 +1,7 @@
 package com.cook2cart.ai_service.dto;
 
 import com.cook2cart.ai_service.util.IngredientsConverter;
+import com.cook2cart.ai_service.util.InstructionsConverter;
 import jakarta.persistence.*;
 import java.util.List;
 import java.util.Objects;
@@ -22,13 +23,18 @@ public class RecipeResponse {
     @Convert(converter = IngredientsConverter.class)
     private List<Ingredient> ingredients;
 
+    @Column(columnDefinition = "TEXT")
+    @Convert(converter = InstructionsConverter.class)
+    private List<String> instructions;
+
     public RecipeResponse() {
     }
 
-    public RecipeResponse(String languageDetected, String englishTranscript, List<Ingredient> ingredients) {
+    public RecipeResponse(String languageDetected, String englishTranscript, List<Ingredient> ingredients, List<String> instructions) {
         this.languageDetected = languageDetected;
         this.englishTranscript = englishTranscript;
         this.ingredients = ingredients;
+        this.instructions = instructions;
     }
 
     public String getLanguageDetected() {
@@ -55,6 +61,14 @@ public class RecipeResponse {
         this.ingredients = ingredients;
     }
 
+    public List<String> getInstructions() {
+        return instructions;
+    }
+
+    public void setInstructions(List<String> instructions) {
+        this.instructions = instructions;
+    }
+
     public Long getId() {
         return id;
     }
@@ -70,12 +84,13 @@ public class RecipeResponse {
         RecipeResponse that = (RecipeResponse) o;
         return Objects.equals(languageDetected, that.languageDetected) &&
                 Objects.equals(englishTranscript, that.englishTranscript) &&
-                Objects.equals(ingredients, that.ingredients);
+                Objects.equals(ingredients, that.ingredients) &&
+                Objects.equals(instructions, that.instructions);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(languageDetected, englishTranscript, ingredients);
+        return Objects.hash(languageDetected, englishTranscript, ingredients, instructions);
     }
 
     @Override
@@ -84,6 +99,7 @@ public class RecipeResponse {
                 "languageDetected='" + languageDetected + '\'' +
                 ", englishTranscript='" + englishTranscript + '\'' +
                 ", ingredients=" + ingredients +
+                ", instructions=" + instructions +
                 '}';
     }
 }

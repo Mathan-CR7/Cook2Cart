@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import api, { videoService, aiService } from '../utils/api';
+import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
 const STEPS = [
   { icon: 'download', label: 'Video Downloading', desc: 'Downloading your recipe video' },
@@ -19,35 +21,206 @@ const SAMPLE_INGREDIENTS = [
   { name: 'Ginger', quantity: '1', confidence: 85, unit: 'inch' },
 ];
 
+const SAMPLE_INSTRUCTIONS_EN = [
+  "Boil 4 cups of water and 1 teaspoon of salt in a large pan.",
+  "Once the water has boiled, add 2 cups of pasta.",
+  "Boil for 10 minutes or until pasta is cooked. Drain the pasta and set aside.",
+  "In a frying pan, heat 2 tbsp oil and fry 3-4 garlic cloves.",
+  "Add onion, 1 carrot, 1/4 cup peas and fry for a minute.",
+  "To make the white sauce, heat 4 tbsp butter and add 4 tbsp maida.",
+  "Add 2 cups milk and stir until the sauce thickens.",
+  "Combine pasta, vegetables, and sauce, then serve."
+];
+
+const SAMPLE_INSTRUCTIONS_TA = [
+  "ஒரு பெரிய பாத்திரத்தில் 4 கப் தண்ணீர் மற்றும் 1 தேக்கரண்டி உப்பு சேர்த்து கொதிக்க வைக்கவும்.",
+  "தண்ணீர் கொதித்ததும், 2 கப் பாஸ்தா சேர்க்கவும்.",
+  "பாஸ்தா வேகும் வரை 10 நிமிடங்கள் கொதிக்க வைக்கவும், பின் தண்ணீரை வடிகட்டி தனியாக வைக்கவும்.",
+  "ஒரு வறுக்கப்படும் கடாயில் 2 மேஜைக்கரண்டி எண்ணெய் சூடாக்கி, 3-4 பூண்டு பற்களை வதக்கவும்.",
+  "வெங்காயம், 1 கேரட், 1/4 கப் பட்டாணி சேர்த்து ஒரு நிமிடம் வதக்கவும்.",
+  "வெள்ளை சாஸ் செய்ய, 4 மேஜைக்கரண்டி வெண்ணெய் சூடாக்கி, 4 மேஜைக்கரண்டி மைதா சேர்க்கவும்.",
+  "2 கப் பால் சேர்த்து சாஸ் கெட்டியாகும் வரை கிளறவும்.",
+  "பாஸ்தா, காய்கறிகள் மற்றும் சாஸ் ஆகியவற்றை ஒன்றாக கலந்து பரிமாறவும்."
+];
+
+const SAMPLE_INSTRUCTIONS_HI = [
+  "एक बड़े बर्तन में 4 कप पानी और 1 चम्मच नमक डालकर उबालें।",
+  "पानी उबलने के बाद, 2 कप पास्ता डालें।",
+  "पास्ता पकने तक 10 मिनट तक उबालें, फिर पानी छानकर अलग रख दें।",
+  "एक कढ़ाई में 2 चम्मच तेल गरम करें और 3-4 लहसुन की कलियाँ भूनें।",
+  "प्याज, 1 गाजर, 1/4 कप मटर डालें और एक मिनट तक भूनें।",
+  "व्हाइट सॉस बनाने के लिए, 4 चम्मच मक्खन गरम करें और 4 चम्मच मैदा डालें।",
+  "2 कप दूध डालें और सॉस गाढ़ा होने तक चलाएं।",
+  "पास्ता, सब्जियां और सॉस मिलाएं, फिर परोसें।"
+];
+
 export default function AIProcessingPage() {
   const navigate = useNavigate();
   const { videoId } = useParams();
+  const locationState = useLocation().state;
   const { dispatch } = useApp();
   const [currentStep, setCurrentStep] = useState(-1);
   const [progress, setProgress] = useState(0);
+  const [statusMsg, setStatusMsg] = useState('Analyzing the video to extract ingredients');
 
   useEffect(() => {
-    dispatch({ type: 'START_AI_PROCESSING' });
+    let active = true;
 
-    let step = 0;
-    const interval = setInterval(() => {
-      if (step < STEPS.length) {
-        setCurrentStep(step);
-        dispatch({ type: 'SET_AI_STEP', payload: step });
-        setProgress(((step + 1) / STEPS.length) * 100);
+    async function processRecipe() {
+      dispatch({ type: 'START_AI_PROCESSING' });
 
-        if (step === STEPS.length - 1) {
-          clearInterval(interval);
-          dispatch({ type: 'FINISH_AI_PROCESSING', payload: SAMPLE_INGREDIENTS });
-          setTimeout(() => navigate(`/review/${videoId}`), 1200);
+      const youtubeUrl = locationState?.videoUrl || locationState?.url || `https://www.youtube.com/watch?v=${videoId}`;
+      const videoTitle = simplifyRecipeTitle(locationState?.title) || 'My Recipe';
+
+      dispatch({
+        type: 'SET_SELECTED_RECIPE',
+        payload: {
+          id: videoId,
+          videoId: videoId,
+          title: videoTitle,
+          thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
         }
-        step++;
-      } else {
-        clearInterval(interval);
+      });
+
+      try {
+        // Step 1: Downloading Video & Step 2: Extracting Audio
+        if (!active) return;
+        setCurrentStep(0);
+        dispatch({ type: 'SET_AI_STEP', payload: 0 });
+        setProgress(20);
+        setStatusMsg('Downloading video from YouTube...');
+        const videoResponse = await videoService.process(youtubeUrl);
+
+        if (!active) return;
+        setCurrentStep(1);
+        dispatch({ type: 'SET_AI_STEP', payload: 1 });
+        setProgress(40);
+        setStatusMsg('Extracting audio track...');
+        const audioPath = videoResponse.data ? videoResponse.data.audioPath : null;
+        const filename = audioPath ? audioPath.substring(Math.max(audioPath.lastIndexOf('/'), audioPath.lastIndexOf('\\')) + 1) : 'recipe.mp3';
+        const audioResponse = await api.get('/video/download/audio', { params: { filename }, responseType: 'blob' });
+
+        // Step 3: Understanding Recipe & Step 4: Detecting Ingredients
+        if (!active) return;
+        setCurrentStep(2);
+        dispatch({ type: 'SET_AI_STEP', payload: 2 });
+        setProgress(60);
+        setStatusMsg('Sending audio to AI service for transcription...');
+
+        const formData = new FormData();
+        const sanitizedTitle = videoTitle.replace(/[^a-zA-Z0-9]/g, '_');
+        formData.append('file', audioResponse.data, `${sanitizedTitle}.mp3`);
+
+        if (!active) return;
+        setCurrentStep(3);
+        dispatch({ type: 'SET_AI_STEP', payload: 3 });
+        setProgress(80);
+        setStatusMsg('Detecting ingredients and quantities...');
+        const aiResponse = await aiService.processAudio(formData);
+
+        if (!active) return;
+        setCurrentStep(4);
+        dispatch({ type: 'SET_AI_STEP', payload: 4 });
+        setProgress(100);
+        setStatusMsg('Processing complete! Preparing ingredients review...');
+
+        let instructions = aiResponse.data.instructions;
+        if (!instructions || instructions.length === 0) {
+          let detectedLang = 'en';
+          const titleLower = videoTitle.toLowerCase();
+          if (titleLower.includes('tamil') || /[\u0b80-\u0bff]/.test(videoTitle)) {
+            detectedLang = 'ta';
+          } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
+            detectedLang = 'hi';
+          }
+          instructions = 
+            detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
+            detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
+            SAMPLE_INSTRUCTIONS_EN;
+        }
+
+        dispatch({ 
+          type: 'FINISH_AI_PROCESSING', 
+          payload: {
+            ingredients: aiResponse.data.ingredients,
+            instructions: instructions
+          }
+        });
+        setTimeout(() => {
+          if (active) navigate(`/review/${videoId}`);
+        }, 1200);
+
+      } catch (err) {
+        console.error('Error processing recipe through backend:', err);
+        if (!active) return;
+        
+        let errorMsg = 'Failed to connect to backend AI service. Falling back to local simulation...';
+        if (err.response) {
+          if (err.response.status === 429) {
+            errorMsg = 'AI API Rate Limit reached (Too Many Requests). Falling back to local simulation...';
+          } else if (err.response.status === 500) {
+            if (err.response.data && (err.response.data.message || '').includes('429')) {
+              errorMsg = 'AI Service Quota Exceeded (429 Rate Limit). Falling back to local simulation...';
+            } else {
+              errorMsg = 'Backend AI Service encountered an internal error. Falling back to local simulation...';
+            }
+          } else if (err.response.status === 504 || err.response.status === 502) {
+            errorMsg = 'Backend service connection timeout. Falling back to local simulation...';
+          }
+        } else if (err.message && err.message.includes('Network Error')) {
+          errorMsg = 'Network connection failed to the backend services. Falling back to local simulation...';
+        }
+        
+        setStatusMsg(errorMsg);
+        
+        // Graceful fallback animation
+        let step = currentStep >= 0 ? currentStep : 0;
+        const interval = setInterval(() => {
+          if (step < STEPS.length) {
+            setCurrentStep(step);
+            dispatch({ type: 'SET_AI_STEP', payload: step });
+            setProgress(((step + 1) / STEPS.length) * 100);
+
+            if (step === STEPS.length - 1) {
+              clearInterval(interval);
+              
+              let detectedLang = 'en';
+              const titleLower = videoTitle.toLowerCase();
+              if (titleLower.includes('tamil') || /[\u0b80-\u0bff]/.test(videoTitle)) {
+                detectedLang = 'ta';
+              } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
+                detectedLang = 'hi';
+              }
+              const fallbackInstructions = 
+                detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
+                detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
+                SAMPLE_INSTRUCTIONS_EN;
+
+              dispatch({ 
+                type: 'FINISH_AI_PROCESSING', 
+                payload: {
+                  ingredients: SAMPLE_INGREDIENTS,
+                  instructions: fallbackInstructions
+                }
+              });
+              setTimeout(() => {
+                if (active) navigate(`/review/${videoId}`);
+              }, 1200);
+            }
+            step++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 1000);
       }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [videoId]);
+    }
+
+    processRecipe();
+
+    return () => {
+      active = false;
+    };
+  }, [videoId, locationState, dispatch, navigate]);
 
   return (
     <div className="bg-white min-h-screen flex items-center justify-center px-4 pb-16">
@@ -57,7 +230,7 @@ export default function AIProcessingPage() {
             <span className="material-icon fill !text-3xl text-orange-500 animate-pulse">auto_awesome</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">AI is Processing Your Recipe</h1>
-          <p className="text-gray-500">Analyzing the video to extract ingredients</p>
+          <p className="text-gray-500 text-sm">{statusMsg}</p>
         </div>
 
         <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-12">

@@ -4,6 +4,7 @@ import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import { videoService } from '../utils/api';
 import { useApp } from '../context/AppContext';
+import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -28,10 +29,26 @@ export default function LandingPage() {
     setProcessing(true);
     setDownloadedVideo(null);
 
+    // Fetch actual video title from YouTube's free oEmbed API (no API key needed)
+    let videoTitle = 'My Recipe';
+    try {
+      const oembedRes = await fetch(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+      );
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        // Simplify the raw YouTube title to a short user-friendly dish name
+        videoTitle = simplifyRecipeTitle(oembedData.title) || 'My Recipe';
+      }
+    } catch (titleErr) {
+      console.warn('Could not fetch video title from oEmbed, using default:', titleErr);
+    }
+
     try {
       await videoService.process(url);
       setDownloadedVideo({
         videoId,
+        title: videoTitle,
         thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         url,
       });
@@ -50,7 +67,7 @@ export default function LandingPage() {
       navigate(`/process/${downloadedVideo.videoId}`, {
         state: {
           videoId: downloadedVideo.videoId,
-          title: 'YouTube Recipe',
+          title: downloadedVideo.title || 'YouTube Recipe',
           channelTitle: 'YouTube',
           thumbnailUrl: downloadedVideo.thumbnailUrl,
         },
@@ -143,7 +160,7 @@ export default function LandingPage() {
                         <span className="text-green-600 text-sm font-medium">Downloaded</span>
                       </div>
                       <p className="text-gray-900 font-semibold text-sm truncate">
-                        YouTube Recipe
+                        {downloadedVideo.title || 'YouTube Recipe'}
                       </p>
                       <p className="text-gray-400 text-xs mt-0.5 truncate">
                         {downloadedVideo.url}

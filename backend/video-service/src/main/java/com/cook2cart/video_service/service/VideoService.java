@@ -2,7 +2,8 @@ package com.cook2cart.video_service.service;
 
 import com.cook2cart.video_service.dto.VideoResponseDTO;
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -14,9 +15,10 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Slf4j
 @Service
 public class VideoService {
+
+    private static final Logger log = LoggerFactory.getLogger(VideoService.class);
 
     private static final Pattern YOUTUBE_VIDEO_ID_PATTERN =
             Pattern.compile("(?:v=|/)([a-zA-Z0-9_-]{11})");
@@ -51,9 +53,9 @@ public class VideoService {
 
         log.info("Video processing started for URL: {}", youtubeUrl);
 
-        String fileBaseName = buildFileBaseName(youtubeUrl);
-        String videoPath = new File(resolvedVideoDir, fileBaseName + ".mp4").getAbsolutePath();
-        String audioPath = new File(resolvedAudioDir, fileBaseName + ".wav").getAbsolutePath();
+        String baseName = buildFileBaseName(youtubeUrl);
+        String videoPath = new File(resolvedVideoDir, baseName + ".mp4").getAbsolutePath();
+        String audioPath = new File(resolvedAudioDir, baseName + ".mp3").getAbsolutePath();
 
         downloadVideo(youtubeUrl, videoPath);
         extractAudio(videoPath, audioPath);
@@ -78,6 +80,7 @@ public class VideoService {
                 "best[height<=480]",
                 "--merge-output-format",
                 "mp4",
+                "--force-overwrites",
                 "-o",
                 outputPath,
                 youtubeUrl
@@ -98,8 +101,8 @@ public class VideoService {
                 "-i",
                 videoPath,
                 "-vn",
-                "-acodec",
-                "pcm_s16le",
+                "-acodec", "libmp3lame",
+                "-b:a", "128k",
                 "-ar", "16000",
                 "-ac", "1",
                 audioPath
@@ -154,7 +157,6 @@ public class VideoService {
         if (youtubeUrl == null) {
             return null;
         }
-
         Matcher matcher = YOUTUBE_VIDEO_ID_PATTERN.matcher(youtubeUrl);
         return matcher.find() ? matcher.group(1) : null;
     }

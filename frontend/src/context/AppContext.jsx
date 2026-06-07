@@ -9,15 +9,18 @@ const initialState = {
   theme: localStorage.getItem('theme') || 'light',
   searchQuery: '',
   searchResults: [],
-  selectedRecipe: null,
+  selectedRecipe: JSON.parse(localStorage.getItem('selectedRecipe') || 'null'),
   aiProcessing: false,
   aiStep: 0,
-  extractedIngredients: [],
-  cart: [],
+  extractedIngredients: JSON.parse(localStorage.getItem('extractedIngredients') || '[]'),
+  extractedInstructions: JSON.parse(localStorage.getItem('extractedInstructions') || '[]'),
+  cart: JSON.parse(localStorage.getItem('cart') || '[]'),
+  cartObject: JSON.parse(localStorage.getItem('cartObject') || 'null'),
   addresses: [],
   selectedAddress: null,
   orderConfirmed: false,
   recentRecipes: JSON.parse(localStorage.getItem('recentRecipes') || '[]'),
+  savedRecipes: JSON.parse(localStorage.getItem('savedRecipes') || '[]'),
   loading: false,
   budgetMode: false,
   budgetLimit: null,
@@ -50,18 +53,23 @@ function appReducer(state, action) {
       return { ...state, selectedRecipe: action.payload };
 
     case 'START_AI_PROCESSING':
-      return { ...state, aiProcessing: true, aiStep: 0, extractedIngredients: [] };
+      return { ...state, aiProcessing: true, aiStep: 0, extractedIngredients: [], extractedInstructions: [] };
 
     case 'SET_AI_STEP':
       return { ...state, aiStep: action.payload };
 
-    case 'FINISH_AI_PROCESSING':
+    case 'FINISH_AI_PROCESSING': {
+      const isObject = action.payload && !Array.isArray(action.payload);
+      const ingredients = isObject ? action.payload.ingredients : action.payload;
+      const instructions = isObject ? (action.payload.instructions || []) : [];
       return {
         ...state,
         aiProcessing: false,
         aiStep: 5,
-        extractedIngredients: action.payload,
+        extractedIngredients: ingredients || [],
+        extractedInstructions: instructions || [],
       };
+    }
 
     case 'UPDATE_INGREDIENT': {
       const ingredients = [...state.extractedIngredients];
@@ -84,8 +92,51 @@ function appReducer(state, action) {
         extractedIngredients: [...state.extractedIngredients, action.payload],
       };
 
-    case 'SET_CART':
-      return { ...state, cart: action.payload };
+    case 'UPDATE_INSTRUCTION': {
+      const instructions = [...state.extractedInstructions];
+      instructions[action.payload.index] = action.payload.text;
+      return { ...state, extractedInstructions: instructions };
+    }
+
+    case 'REMOVE_INSTRUCTION':
+      return {
+        ...state,
+        extractedInstructions: state.extractedInstructions.filter((_, i) => i !== action.payload),
+      };
+
+    case 'ADD_INSTRUCTION':
+      return {
+        ...state,
+        extractedInstructions: [...state.extractedInstructions, action.payload],
+      };
+
+    case 'SET_CART': {
+      const payload = action.payload;
+      if (payload && payload.items) {
+        const newItems = payload.items.map((newItem) => {
+          const existingItem = state.cart.find(
+            (item) => item.ingredientName === newItem.ingredientName
+          );
+          return {
+            ...newItem,
+            qty: existingItem ? (existingItem.qty || 1) : 1,
+          };
+        });
+        return {
+          ...state,
+          cart: newItems,
+          cartObject: {
+            ...payload,
+            items: newItems,
+          },
+        };
+      }
+      return {
+        ...state,
+        cart: payload || [],
+        cartObject: payload ? { items: payload, originalServings: 4, targetServings: 4, totalPrice: 0 } : null,
+      };
+    }
 
     case 'UPDATE_CART_ITEM': {
       const cart = [...state.cart];
@@ -93,11 +144,21 @@ function appReducer(state, action) {
         ...cart[action.payload.index],
         ...action.payload.data,
       };
-      return { ...state, cart };
+      return {
+        ...state,
+        cart,
+        cartObject: state.cartObject ? { ...state.cartObject, items: cart } : null,
+      };
     }
 
-    case 'REMOVE_CART_ITEM':
-      return { ...state, cart: state.cart.filter((_, i) => i !== action.payload) };
+    case 'REMOVE_CART_ITEM': {
+      const cart = state.cart.filter((_, i) => i !== action.payload);
+      return {
+        ...state,
+        cart,
+        cartObject: state.cartObject ? { ...state.cartObject, items: cart } : null,
+      };
+    }
 
     case 'SET_ADDRESSES':
       return { ...state, addresses: action.payload };
@@ -115,6 +176,20 @@ function appReducer(state, action) {
       const recent = [action.payload, ...state.recentRecipes.filter(r => r.id !== action.payload.id)].slice(0, 20);
       localStorage.setItem('recentRecipes', JSON.stringify(recent));
       return { ...state, recentRecipes: recent };
+    }
+
+    case 'SAVE_RECIPE': {
+      const already = state.savedRecipes.some(r => r.id === action.payload.id);
+      if (already) return state;
+      const saved = [action.payload, ...state.savedRecipes];
+      localStorage.setItem('savedRecipes', JSON.stringify(saved));
+      return { ...state, savedRecipes: saved };
+    }
+
+    case 'REMOVE_SAVED_RECIPE': {
+      const saved = state.savedRecipes.filter(r => r.id !== action.payload);
+      localStorage.setItem('savedRecipes', JSON.stringify(saved));
+      return { ...state, savedRecipes: saved };
     }
 
     case 'SET_BUDGET_MODE':
@@ -153,6 +228,28 @@ export function AppProvider({ children }) {
         });
     }
   }, [dispatch]);
+
+  useEffect(() => {
+    localStorage.setItem('extractedIngredients', JSON.stringify(state.extractedIngredients));
+    localStorage.setItem('extractedInstructions', JSON.stringify(state.extractedInstructions));
+  }, [state.extractedIngredients, state.extractedInstructions]);
+
+  useEffect(() => {
+    localStorage.setItem('cart', JSON.stringify(state.cart));
+    if (state.cartObject) {
+      localStorage.setItem('cartObject', JSON.stringify(state.cartObject));
+    } else {
+      localStorage.removeItem('cartObject');
+    }
+  }, [state.cart, state.cartObject]);
+
+  useEffect(() => {
+    if (state.selectedRecipe) {
+      localStorage.setItem('selectedRecipe', JSON.stringify(state.selectedRecipe));
+    } else {
+      localStorage.removeItem('selectedRecipe');
+    }
+  }, [state.selectedRecipe]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>

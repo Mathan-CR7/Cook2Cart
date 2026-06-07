@@ -2,7 +2,8 @@ package com.cook2cart.video_service.service;
 
 import com.cook2cart.video_service.dto.YouTubeVideoDTO;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -11,10 +12,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class YouTubeSearchService {
+
+    private static final Logger log = LoggerFactory.getLogger(YouTubeSearchService.class);
 
     @Value("${youtube.api.key}")
     private String apiKey;

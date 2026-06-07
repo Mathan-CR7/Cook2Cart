@@ -50,8 +50,21 @@ public class GeminiRecipeService implements RecipeService {
             byte[] fileBytes = audioFile.getBytes();
             String base64Data = Base64.getEncoder().encodeToString(fileBytes);
             String contentType = audioFile.getContentType();
-            if (contentType == null || contentType.isEmpty()) {
-                contentType = "audio/mp3"; // Fallback mime type
+            if (contentType == null || contentType.isEmpty() || "application/octet-stream".equals(contentType)) {
+                String filename = audioFile.getOriginalFilename();
+                if (filename != null) {
+                    if (filename.toLowerCase().endsWith(".wav")) {
+                        contentType = "audio/wav";
+                    } else if (filename.toLowerCase().endsWith(".mp3")) {
+                        contentType = "audio/mp3";
+                    } else if (filename.toLowerCase().endsWith(".m4a")) {
+                        contentType = "audio/m4a";
+                    } else {
+                        contentType = "audio/wav";
+                    }
+                } else {
+                    contentType = "audio/wav";
+                }
             }
             String promptText = "You are a Multimodal AI Recipe Processing Assistant.\n" +
                     "Your job is to analyze cooking video/audio content and generate a standardized recipe JSON.\n\n" +
@@ -66,7 +79,8 @@ public class GeminiRecipeService implements RecipeService {
                     "8. Unit Normalization: Preserve the original recipe quantity and unit, and convert quantities into standard units whenever possible using grams (g), kilograms (kg), milliliters (ml), liters (l), or pieces.\n" +
                     "9. Missing Quantity Estimation & Essential Injections: If essential cooking ingredients (like salt, oil, water) are missing or not explicitly specified in the recipe, automatically add them to the ingredients list. Estimate a reasonable quantity for them (and any other ingredients with unspecified quantities) based on the serving count, and mark all estimated/injected values with: \"estimated\": true. Never return null for quantities; use your knowledge to predict a realistic cooking quantity.\n" +
                     "10. Contextual & Unnamed Reference Resolution: If an ingredient is referred to in an unnamed way (e.g. \"add this powder\", \"add this masala\", \"add the prepared mixture\", \"add the ground spices\", \"add the paste\"), analyze earlier recipe steps to identify and extract the exact underlying ingredients that were roasted, ground, blended, mixed, prepared, or combined.\n" +
-                    "11. Source Tracking: For every ingredient specify where it was found using 'speech', 'image', 'vision', or 'multiple'.\n\n" +
+                    "11. Source Tracking: For every ingredient specify where it was found using 'speech', 'image', 'vision', or 'multiple'.\n" +
+                    "12. Instructions Extraction: Extract detailed step-by-step cooking instructions to prepare the dish. Crucially, the instructions MUST be written in the primary language detected in the video/audio (e.g., if they speak Tamil, the instructions must be in Tamil; if they speak Hindi, the instructions must be in Hindi; if they speak English, the instructions must be in English).\n\n" +
                     "Rules:\n" +
                     "- Never omit detected ingredients.\n" +
                     "- Combine duplicate ingredients from different sources.\n" +
@@ -86,6 +100,9 @@ public class GeminiRecipeService implements RecipeService {
                     "      \"source\": \"string\",\n" +
                     "      \"confidence\": number\n" +
                     "    }\n" +
+                    "  ],\n" +
+                    "  \"instructions\": [\n" +
+                    "    \"string\"\n" +
                     "  ]\n" +
                     "}";
             Map<String, Object> requestBody = new HashMap<>();
@@ -186,6 +203,14 @@ public class GeminiRecipeService implements RecipeService {
                             new Ingredient("baking soda", 1.0, "teaspoon", false, "speech", 0.96),
                             new Ingredient("salt", 0.5, "teaspoon", false, "speech", 0.98),
                             new Ingredient("semi sweet chocolate chips", 2.0, "cup", false, "speech", 0.98)
+                    ),
+                    Arrays.asList(
+                            "Preheat oven to 375°F (190°C).",
+                            "Cream the softened butter, granulated sugar, and brown sugar until smooth.",
+                            "Beat in the eggs one at a time, then stir in the vanilla extract.",
+                            "Combine the flour, baking soda, and salt, then gradually stir into the creamed mixture.",
+                            "Fold in the chocolate chips and drop large spoonfuls onto ungreased pans.",
+                            "Bake for 9 to 11 minutes or until golden brown."
                     )
             );
         }
@@ -200,6 +225,13 @@ public class GeminiRecipeService implements RecipeService {
                             new Ingredient("cherry tomatoes", 1.0, "cup", false, "speech", 0.96),
                             new Ingredient("grated parmesan cheese", 0.5, "cup", false, "speech", 0.94),
                             new Ingredient("fresh basil leaves", null, null, true, "vision", 0.85)
+                    ),
+                    Arrays.asList(
+                            "Bring a large pot of salted water to a boil and cook the spaghetti.",
+                            "Heat olive oil in a pan and fry the minced garlic until fragrant.",
+                            "Add the halved cherry tomatoes and cook for 3 minutes.",
+                            "Drain spaghetti and toss with the garlic and tomatoes.",
+                            "Top with parmesan cheese and fresh basil leaves."
                     )
             );
         }
@@ -211,6 +243,10 @@ public class GeminiRecipeService implements RecipeService {
                             new Ingredient("flour", 2.0, "cup", false, "speech", 0.95),
                             new Ingredient("milk", 1.0, "cup", false, "speech", 0.96),
                             new Ingredient("egg", 1.0, null, false, "vision", 0.92)
+                    ),
+                    Arrays.asList(
+                            "Mix the flour, milk, and egg in a bowl until smooth.",
+                            "Cook on a heated pan until golden."
                     )
             );
         }
@@ -419,7 +455,7 @@ public class GeminiRecipeService implements RecipeService {
         List<Ingredient> deduplicated = deduplicateIngredients(ingredients);
         
         String language = "en";
-        return new RecipeResponse(language, request.getSpeechTranscript(), deduplicated);
+        return new RecipeResponse(language, request.getSpeechTranscript(), deduplicated, new ArrayList<>());
     }
 
     private void parseTextSource(String text, String sourceName, double baseConfidence, Map<String, ParsedIngredient> map) {
@@ -1035,6 +1071,13 @@ public class GeminiRecipeService implements RecipeService {
                 continue;
             }
             String normalizedName = ing.getName().trim().toLowerCase();
+            if (normalizedName.isEmpty() || 
+                normalizedName.equals("other") || 
+                normalizedName.equals("others") || 
+                normalizedName.contains("other ingredient") || 
+                normalizedName.equals("other details")) {
+                continue;
+            }
             if (nameToIngredient.containsKey(normalizedName)) {
                 Ingredient existing = nameToIngredient.get(normalizedName);
                 mergeIngredients(existing, ing);

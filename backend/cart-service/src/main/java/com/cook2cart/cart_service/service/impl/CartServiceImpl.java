@@ -461,7 +461,9 @@ public class CartServiceImpl implements CartService {
 
     private String capitalize(String str) {
         if (str == null || str.isEmpty()) return "";
-        return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
+        return java.util.Arrays.stream(str.split("\\s+"))
+                .map(word -> word.isEmpty() ? "" : word.substring(0, 1).toUpperCase() + word.substring(1).toLowerCase())
+                .collect(Collectors.joining(" "));
     }
 
     private double parseSizeToMetric(String size) {
@@ -527,6 +529,9 @@ public class CartServiceImpl implements CartService {
         if (ing.getProducts() == null || ing.getProducts().isEmpty()) {
             List<StoreProduct> prodOpts = new ArrayList<>();
             List<String> productNames = getCategoryProductNames(ing.getCategory());
+            if (productNames.size() == 1 && "Other".equalsIgnoreCase(productNames.get(0))) {
+                productNames = Collections.singletonList(capitalize(ing.getName()));
+            }
             for (String pName : productNames) {
                 for (String b : ing.getRecommendedBrands()) {
                     for (String s : ing.getRecommendedPackSizes()) {
@@ -591,6 +596,46 @@ public class CartServiceImpl implements CartService {
         String b = brand.toLowerCase().trim();
         String s = size.toLowerCase().trim();
         String pName = productName.toLowerCase().trim();
+
+        if (pName.contains("seeds") || pName.contains("pepper") || pName.contains("powder") || pName.contains("masala") || pName.contains("fenugreek")) {
+            double pricePer100g = 35.0;
+            if (pName.contains("pepper")) pricePer100g = 60.0;
+            else if (pName.contains("cardamom")) pricePer100g = 250.0;
+            
+            double qty = 100.0;
+            String sLower = s.toLowerCase();
+            if (sLower.endsWith("g")) {
+                try { qty = Double.parseDouble(sLower.replace("g", "")); } catch (Exception e) {}
+            }
+            double estPrice = (qty / 100.0) * pricePer100g;
+            if (!"store brand".equals(b)) {
+                estPrice *= 1.2;
+            }
+            return Math.round(estPrice * 2.0) / 2.0;
+        }
+
+        if (pName.contains("dal") || pName.contains("dhal") || pName.contains("lentil")) {
+            double pricePerKg = 120.0;
+            if (pName.contains("toor")) pricePerKg = 160.0;
+            else if (pName.contains("chana")) pricePerKg = 110.0;
+            else if (pName.contains("urad")) pricePerKg = 180.0;
+            else if (pName.contains("moong")) pricePerKg = 150.0;
+            else if (pName.contains("masoor")) pricePerKg = 130.0;
+            
+            double qty = 500.0;
+            String sLower = s.toLowerCase();
+            if (sLower.endsWith("kg")) {
+                try { qty = Double.parseDouble(sLower.replace("kg", "")) * 1000.0; } catch (Exception e) {}
+            } else if (sLower.endsWith("g")) {
+                try { qty = Double.parseDouble(sLower.replace("g", "")); } catch (Exception e) {}
+            }
+            
+            double estPrice = (qty / 1000.0) * pricePerKg;
+            if (brand.toLowerCase().contains("tata") || brand.toLowerCase().contains("organic")) {
+                estPrice *= 1.25;
+            }
+            return Math.round(estPrice * 2.0) / 2.0;
+        }
 
         if (cat.contains("rice")) {
             if (pName.contains("basmati")) {
@@ -776,6 +821,13 @@ public class CartServiceImpl implements CartService {
         String cat = category.toLowerCase().trim();
         String lowerName = name != null ? name.toLowerCase().trim() : "";
         
+        if (lowerName.contains("dal") || lowerName.contains("dhal") || lowerName.contains("lentil")) {
+            return Arrays.asList("Tata Sampann", "Organic Tattva", "Store Brand");
+        }
+        if (lowerName.contains("seeds") || lowerName.contains("pepper") || lowerName.contains("powder") || lowerName.contains("masala") || lowerName.contains("fenugreek")) {
+            return Arrays.asList("Catch", "Everest", "MTR", "Store Brand");
+        }
+
         List<String> storeBrandOnlyList = Arrays.asList(
             "tomato", "onion", "potato", "brinjal", "eggplant", "carrot", "beetroot", 
             "cabbage", "cauliflower", "banana", "apple", "orange", "mint", "coriander", "chilli", "chili"
@@ -816,6 +868,13 @@ public class CartServiceImpl implements CartService {
         String cat = category.toLowerCase().trim();
         String lowerName = name != null ? name.toLowerCase().trim() : "";
         
+        if (lowerName.contains("dal") || lowerName.contains("dhal") || lowerName.contains("lentil")) {
+            return Arrays.asList("500g", "1kg", "2kg");
+        }
+        if (lowerName.contains("seeds") || lowerName.contains("pepper") || lowerName.contains("powder") || lowerName.contains("masala") || lowerName.contains("fenugreek")) {
+            return Arrays.asList("100g", "250g", "500g");
+        }
+
         if (cat.contains("rice")) {
             return Arrays.asList("1kg", "5kg", "10kg");
         } else if (cat.contains("atta") || cat.contains("flour")) {
@@ -857,7 +916,7 @@ public class CartServiceImpl implements CartService {
         if (lower.contains("salt")) return "Salt";
         if (lower.contains("eggplant") || lower.contains("brinjal")) return "Brinjal";
         if (lower.contains("lady finger") || lower.contains("okra") || lower.contains("ladyfinger")) return "Okra";
-        if (lower.contains("coriander") || lower.contains("cilantro")) return "Coriander Leaves";
+        if (lower.contains("coriander leaves") || lower.contains("cilantro")) return "Coriander Leaves";
         if (lower.contains("onion")) return "Onion";
         if (lower.contains("tomato")) return "Tomato";
         if (lower.contains("potato")) return "Potato";

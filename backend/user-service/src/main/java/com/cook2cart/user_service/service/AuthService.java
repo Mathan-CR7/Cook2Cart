@@ -45,7 +45,7 @@ public class AuthService {
                 .orElseThrow(() ->
                         new RuntimeException("Invalid Email or Password"));
 
-        if (!passwordEncoder.matches(
+        if (user.getPassword() == null || !passwordEncoder.matches(
                 request.getPassword(),
                 user.getPassword())) {
 

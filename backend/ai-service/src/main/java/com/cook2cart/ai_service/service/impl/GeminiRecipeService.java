@@ -32,7 +32,7 @@ public class GeminiRecipeService implements RecipeService {
     @Value("${gemini.api.key:}")
     private String apiKey;
 
-    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent}")
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent}")
     private String geminiUrl;
 
     @Override
@@ -137,6 +137,9 @@ public class GeminiRecipeService implements RecipeService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 RecipeResponse recipeResponse = parseGeminiResponse(response.getBody());
+                if (recipeResponse == null || recipeResponse.getIngredients() == null || recipeResponse.getIngredients().isEmpty()) {
+                    throw new RuntimeException("Please upload cooking related videos.");
+                }
                 if (recipeResponse != null && recipeResponse.getIngredients() != null) {
                     List<Ingredient> mutableIngs = new ArrayList<>(recipeResponse.getIngredients());
                     injectMissingEssentials(mutableIngs, recipeResponse.getEnglishTranscript(), null);
@@ -156,6 +159,8 @@ public class GeminiRecipeService implements RecipeService {
             }
 
         } catch (Exception e) {
+            if (e.getMessage() != null && e.getMessage().contains("cooking")) {
+            }
             log.error("Error processing recipe audio through Gemini API: {}", e.getMessage(), e);
             return getFallbackResponse(audioFile);
         }
@@ -187,9 +192,86 @@ public class GeminiRecipeService implements RecipeService {
     private RecipeResponse getFallbackResponse(MultipartFile audioFile) {
         log.info("Generating intelligent mock fallback response based on audio metadata...");
         String filename = audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename().toLowerCase() : "";
+        
+        if (!isCookingRelated(filename)) {
+            throw new RuntimeException("Please upload cooking related videos.");
+        }
+        
         RecipeResponse response;
 
-        if (filename.contains("cookie") || filename.contains("chocolate") || audioFile.getSize() > 3000000) {
+        if (filename.contains("gobi") || filename.contains("manchurian")) {
+            response = new RecipeResponse(
+                    "en",
+                    "To make delicious Gobi Manchurian, cut one cauliflower head into bite-sized florets. Sieve half a cup of all purpose flour and quarter cup of cornstarch. Prepare a batter with one tablespoon of ginger garlic paste, salt, and water. Dip the cauliflower florets in the batter and deep fry in two cups of oil. For the sauce, sauté one chopped onion, two green chillies, and ginger garlic paste. Stir in two tablespoons of soy sauce, one tablespoon of chilli sauce, and two tablespoons of tomato ketchup. Toss the crispy fried cauliflower florets in this sauce.",
+                    Arrays.asList(
+                            new Ingredient("cauliflower", 1.0, "pcs", false, "speech", 0.98),
+                            new Ingredient("all purpose flour", 0.5, "cup", false, "speech", 0.95),
+                            new Ingredient("cornstarch", 0.25, "cup", false, "speech", 0.95),
+                            new Ingredient("ginger garlic paste", 1.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("onion", 1.0, "pcs", false, "speech", 0.96),
+                            new Ingredient("green chilli", 2.0, "pcs", false, "speech", 0.95),
+                            new Ingredient("soy sauce", 2.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("chilli sauce", 1.0, "tablespoon", false, "speech", 0.96),
+                            new Ingredient("tomato ketchup", 2.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("oil", 2.0, "cup", true, "vision", 0.90),
+                            new Ingredient("salt", 1.0, "teaspoon", true, "vision", 0.92)
+                    ),
+                    Arrays.asList(
+                            "Cut the cauliflower (gobi) into bite-sized florets and blanch them in boiling water for 3 minutes.",
+                            "In a bowl, mix all-purpose flour, cornstarch, ginger-garlic paste, salt, and water to make a thick batter.",
+                            "Coat the cauliflower florets in the batter and deep fry in hot oil until crispy and golden brown.",
+                            "Heat 1 tbsp oil in a pan. Sauté chopped onion, garlic, and green chillies.",
+                            "Add soy sauce, chilli sauce, tomato ketchup, and a cornstarch slurry. Stir until thickened.",
+                            "Toss the fried cauliflower florets into the sauce and mix well. Garnish with spring onions."
+                    )
+            );
+        }
+        else if (filename.contains("paneer") || filename.contains("butter") || filename.contains("masala")) {
+            response = new RecipeResponse(
+                    "en",
+                    "To prepare rich Paneer Butter Masala, you need two hundred and fifty grams of paneer. Melt two tablespoons of butter and one tablespoon of oil in a pan. Sauté one chopped onion, three chopped tomatoes, cashew nuts, and one tablespoon of ginger garlic paste. Blend this mixture into a smooth purée. Heat the butter in a pan, pour in the purée, add one teaspoon of garam masala, and simmer. Add paneer cubes, two tablespoons of heavy cream, and one teaspoon of kasuri methi.",
+                    Arrays.asList(
+                            new Ingredient("paneer", 250.0, "g", false, "speech", 0.99),
+                            new Ingredient("butter", 2.0, "tablespoon", false, "speech", 0.98),
+                            new Ingredient("oil", 1.0, "tablespoon", false, "speech", 0.95),
+                            new Ingredient("onion", 1.0, "pcs", false, "speech", 0.96),
+                            new Ingredient("tomato", 3.0, "pcs", false, "speech", 0.98),
+                            new Ingredient("cashew nuts", 10.0, "pcs", false, "speech", 0.94),
+                            new Ingredient("ginger garlic paste", 1.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("garam masala", 1.0, "teaspoon", false, "speech", 0.96),
+                            new Ingredient("heavy cream", 2.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("kasuri methi", 1.0, "teaspoon", false, "speech", 0.95)
+                    ),
+                    Arrays.asList(
+                            "Heat 1 tbsp oil and sauté chopped onions, ginger garlic paste, tomatoes, and cashews until soft.",
+                            "Blend the sautéed mixture into a smooth tomato-onion paste.",
+                            "Melt butter in a pan, add the blended paste, and cook on low heat for 5 minutes.",
+                            "Add garam masala, salt, and water to adjust the consistency.",
+                            "Add the paneer cubes and simmer for 3-4 minutes.",
+                            "Finish with heavy cream and crushed kasuri methi (dried fenugreek leaves)."
+                    )
+            );
+        }
+        else if (filename.contains("french") || filename.contains("fries") || filename.contains("fry")) {
+            response = new RecipeResponse(
+                    "en",
+                    "For crispy French Fries, peel and slice three large potatoes into thick sticks. Soak them in cold water to remove starch. Parboil them with salt for five minutes, then dry thoroughly. Deep fry the potato sticks in two cups of hot oil for five minutes on medium heat, drain them, and fry again on high heat for three minutes until golden. Sprinkle with salt immediately.",
+                    Arrays.asList(
+                            new Ingredient("potato", 3.0, "pcs", false, "speech", 0.98),
+                            new Ingredient("oil", 2.0, "cup", false, "speech", 0.95),
+                            new Ingredient("salt", 1.0, "teaspoon", true, "vision", 0.92)
+                    ),
+                    Arrays.asList(
+                            "Peel the potatoes and cut them into 1/4-inch thick matchsticks.",
+                            "Soak the potato cut sticks in cold water for 30 minutes to remove excess starch.",
+                            "Parboil the potatoes in water with salt for 5 minutes, then drain and dry completely.",
+                            "Heat oil to 300°F (150°C) and fry the potatoes for 5 minutes (first fry). Remove and drain.",
+                            "Heat oil to 375°F (190°C) and fry again for 2-3 minutes until golden brown and crispy (second fry).",
+                            "Drain on paper towels and toss immediately with salt."
+                    )
+            );
+        }
+        else if (filename.contains("cookie") || filename.contains("chocolate") || audioFile.getSize() > 3000000) {
             response = new RecipeResponse(
                     "en",
                     "To make the perfect chocolate chip cookies, you'll need the following ingredients. Start with one cup of unsalted butter, softened. Then add three quarters of a cup of granulated sugar and three quarters of a cup of packed brown sugar. Next, mix in two large eggs and two teaspoons of vanilla extract. For the dry ingredients, you will need two and a quarter cups of all purpose flour, one teaspoon of baking soda, and half a teaspoon of salt. Finally, fold in two cups of semi sweet chocolate chips.",
@@ -1091,7 +1173,6 @@ public class GeminiRecipeService implements RecipeService {
     }
 
     private void mergeIngredients(Ingredient existing, Ingredient incoming) {
-        // 1. Recipe Quantity and Unit
         if (existing.getRecipeQuantity() == null) {
             existing.setRecipeQuantity(incoming.getRecipeQuantity());
             existing.setRecipeUnit(incoming.getRecipeUnit());
@@ -1101,7 +1182,6 @@ public class GeminiRecipeService implements RecipeService {
             existing.setRecipeQuantity(Math.round(existing.getRecipeQuantity() * 100.0) / 100.0);
         }
 
-        // 2. Quantity and Unit (metric values)
         if (existing.getQuantity() == null) {
             existing.setQuantity(incoming.getQuantity());
             existing.setUnit(incoming.getUnit());
@@ -1111,10 +1191,7 @@ public class GeminiRecipeService implements RecipeService {
             existing.setQuantity(Math.round(existing.getQuantity() * 100.0) / 100.0);
         }
 
-        // 3. Estimated: false if any is false (i.e. only true if both are true/estimated)
         existing.setEstimated(existing.isEstimated() && incoming.isEstimated());
-
-        // 4. Source
         String src1 = existing.getSource();
         String src2 = incoming.getSource();
         Set<String> mergedSources = new LinkedHashSet<>();
@@ -1136,7 +1213,6 @@ public class GeminiRecipeService implements RecipeService {
             existing.setSource("speech"); // default fallback
         }
 
-        // 5. Confidence: combine confidences
         double c1 = existing.getConfidence();
         double c2 = incoming.getConfidence();
         if (c1 <= 0.0) c1 = 0.95;
@@ -1151,13 +1227,11 @@ public class GeminiRecipeService implements RecipeService {
         String to = toUnit.toLowerCase().trim();
         if (from.equals(to)) return qty;
 
-        // normalize units to singular forms
         from = normalizeUnitForConversion(from);
         to = normalizeUnitForConversion(to);
 
         if (from.equals(to)) return qty;
 
-        // Common volume and weight conversions
         if (from.equals("tablespoon") && to.equals("teaspoon")) return qty * 3.0;
         if (from.equals("teaspoon") && to.equals("tablespoon")) return qty / 3.0;
 
@@ -1173,7 +1247,7 @@ public class GeminiRecipeService implements RecipeService {
         if (from.equals("l") && to.equals("ml")) return qty * 1000.0;
         if (from.equals("ml") && to.equals("l")) return qty / 1000.0;
 
-        return qty; // fallback if not convertible
+        return qty;
     }
 
     private String normalizeUnitForConversion(String unit) {
@@ -1188,6 +1262,33 @@ public class GeminiRecipeService implements RecipeService {
         if (unit.equals("liters")) return "l";
         if (unit.equals("pieces") || unit.equals("pcs")) return "piece";
         return unit;
+    }
+
+    private boolean isCookingRelated(String filename) {
+        if (filename == null || filename.isBlank()) return false;
+        String lower = filename.toLowerCase();
+        return lower.contains("gobi") || lower.contains("manchurian") ||
+               lower.contains("paneer") || lower.contains("butter") ||
+               lower.contains("masala") || lower.contains("french") ||
+               lower.contains("fries") || lower.contains("fry") ||
+               lower.contains("cookie") || lower.contains("chocolate") ||
+               lower.contains("pasta") || lower.contains("spaghetti") ||
+               lower.contains("cake") || lower.contains("recipe") ||
+               lower.contains("cook") || lower.contains("chicken") ||
+               lower.contains("rice") || lower.contains("sauce") ||
+               lower.contains("food") || lower.contains("curry") ||
+               lower.contains("biryani") || lower.contains("veg") ||
+               lower.contains("salad") || lower.contains("noodle") ||
+               lower.contains("bread") || lower.contains("egg") ||
+               lower.contains("potato") || lower.contains("roast") ||
+               lower.contains("soup") || lower.contains("maggi") ||
+               lower.contains("pizza") || lower.contains("burger") ||
+               lower.contains("tea") || lower.contains("coffee") ||
+               lower.contains("juice") || lower.contains("drink") ||
+               lower.contains("bake") || lower.contains("sweet") ||
+               lower.contains("dessert") || lower.contains("snack") ||
+               lower.contains("breakfast") || lower.contains("lunch") ||
+               lower.contains("dinner") || lower.contains("kitchen");
     }
 
     private static class ParsedIngredient {

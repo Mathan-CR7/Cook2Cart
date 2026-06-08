@@ -77,7 +77,7 @@ public class VideoService {
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "yt-dlp",
                 "-f",
-                "best[height<=480]",
+                "best[height<=480]/bestvideo[height<=480]+bestaudio/best",
                 "--merge-output-format",
                 "mp4",
                 "--force-overwrites",

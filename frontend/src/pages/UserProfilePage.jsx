@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
+import PremiumBackground from '../components/PremiumBackground';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: 'person' },
@@ -17,61 +18,90 @@ export default function UserProfilePage() {
   const [activeTab, setActiveTab] = useState('profile');
 
   const user = state.user || { name: 'John Doe', email: 'john@example.com' };
-  const addresses = state.addresses;
-  const recentRecipes = state.recentRecipes;
+  const addresses = state.addresses || [];
+  const recentRecipes = state.recentRecipes || [];
 
   return (
-    <div className="bg-white min-h-screen pb-16">
+    <div className="c2c-root min-h-screen pb-32 overflow-x-hidden relative bg-[white]">
+      <PremiumBackground />
       <AppBar />
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
-        <div className="bg-white border border-gray-200 rounded-3xl shadow-lg p-8 text-center mb-8">
-          <div className="w-20 h-20 mx-auto rounded-full gradient-bg flex items-center justify-center text-white text-3xl font-bold mb-4 shadow-lg">
-            {user.name?.charAt(0)?.toUpperCase() || 'U'}
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 relative z-10 animate-fade-slide-up font-display">
+        
+        {/* Profile dashboard header */}
+        <div className="glass border border-white/60 rounded-3xl p-8 text-center mb-8 relative overflow-hidden shadow-sm">
+          <div className="absolute top-0 left-0 w-full h-[6px] gradient-bg" />
+          
+          <div className="w-20 h-20 mx-auto rounded-2xl gradient-bg flex items-center justify-center text-white text-3xl font-display font-black mb-5 shadow-md border border-white/20 relative overflow-hidden">
+            <span>{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+            <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">{user.name}</h2>
-          <p className="text-gray-500 text-sm">{user.email}</p>
-          <div className="grid grid-cols-3 gap-6 mt-6 max-w-xs mx-auto">
+
+          <h2 className="font-display font-black text-2xl text-[#1e2229]">{user.name}</h2>
+          <p className="text-gray-400 text-sm mt-1 font-display font-medium">{user.email}</p>
+          
+          {/* Stats Bar */}
+          <div className="grid grid-cols-3 gap-4 mt-8 max-w-sm mx-auto border-t border-gray-100 pt-6">
             {[
               { value: recentRecipes.length, label: 'Recipes' },
               { value: addresses.length, label: 'Addresses' },
               { value: state.orderConfirmed ? 1 : 0, label: 'Orders' },
             ].map((stat, i) => (
-              <div key={i} className="text-center">
-                <span className="block text-xl font-bold text-orange-500">{stat.value}</span>
-                <span className="text-xs text-gray-500">{stat.label}</span>
+              <div key={i} className="text-center font-display">
+                <span className="block text-2xl font-black text-[#ff6b35]">{stat.value}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-450">{stat.label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="md:w-48 flex-shrink-0">
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden flex flex-row md:flex-col gap-0.5 p-1.5">
-              {TABS.map((tab) => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
-                  <span className={`material-icon !text-lg ${activeTab === tab.id ? 'fill text-orange-500' : ''}`}>{tab.icon}</span>
-                  {tab.label}
-                </button>
-              ))}
+        {/* Navigation Tab Menu and Content Panels */}
+        <div className="flex flex-col md:flex-row gap-6">
+          
+          {/* Side Menu Tab switcher */}
+          <div className="md:w-56 flex-shrink-0">
+            <div className="glass border border-white/60 rounded-2xl p-2 flex flex-row md:flex-col gap-1 overflow-x-auto no-scrollbar shadow-sm">
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button 
+                    key={tab.id} 
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold font-display uppercase tracking-wider transition-all flex-shrink-0 md:w-full ${
+                      isActive 
+                        ? 'bg-white text-[#ff6b35] border border-gray-200 shadow-sm' 
+                        : 'text-gray-400 hover:text-gray-700 border border-transparent'
+                    }`}
+                  >
+                    <span className={`material-icon text-base ${isActive ? 'fill text-[#ff6b35]' : ''}`}>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
+          {/* Tab Content Area */}
           <div className="flex-1">
+            
+            {/* Profile Content */}
             {activeTab === 'profile' && (
-              <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                <h3 className="font-semibold text-gray-900 mb-5">Profile Information</h3>
-                <div className="flex flex-col gap-2">
+              <div className="glass border border-white/60 rounded-3xl p-6 md:p-8 animate-fade-slide-up shadow-sm">
+                <h3 className="font-display font-extrabold text-lg text-[#1e2229] mb-6 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-[#ff6b35] rounded-full" />
+                  <span>Personal Details</span>
+                </h3>
+                <div className="flex flex-col gap-3">
                   {[
-                    { icon: 'person', label: 'Name', value: user.name },
-                    { icon: 'mail', label: 'Email', value: user.email },
-                    { icon: 'phone', label: 'Phone', value: user.phone || 'Not added' },
+                    { icon: 'person', label: 'Display Name', value: user.name },
+                    { icon: 'mail', label: 'Email Address', value: user.email },
+                    { icon: 'phone', label: 'Contact Number', value: user.phone || 'No contact number added' },
                   ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-4 px-4 py-3 bg-gray-50 rounded-xl">
-                      <span className="material-icon !text-lg text-orange-500">{item.icon}</span>
-                      <div>
-                        <span className="block text-xs text-gray-500">{item.label}</span>
-                        <span className="text-sm text-gray-900">{item.value}</span>
+                    <div key={i} className="flex items-center gap-4 px-4 py-3.5 bg-white/40 border border-gray-150 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
+                      <span className="material-icon text-lg text-[#ff6b35]">{item.icon}</span>
+                      <div className="font-display">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-gray-400">{item.label}</span>
+                        <span className="text-sm font-bold text-[#1e2229] mt-0.5 block">{item.value}</span>
                       </div>
                     </div>
                   ))}
@@ -79,22 +109,30 @@ export default function UserProfilePage() {
               </div>
             )}
 
+            {/* Delivery address lists */}
             {activeTab === 'addresses' && (
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-4">Saved Addresses</h3>
+              <div className="glass border border-white/60 rounded-3xl p-6 md:p-8 animate-fade-slide-up shadow-sm">
+                <h3 className="font-display font-extrabold text-lg text-[#1e2229] mb-6 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-[#ff6b35] rounded-full" />
+                  <span>Saved Addresses</span>
+                </h3>
                 {addresses.length === 0 ? (
-                  <div className="bg-gray-50 rounded-2xl p-12 text-center">
-                    <span className="text-3xl block mb-3">📍</span>
-                    <p className="text-gray-500 text-sm">No saved addresses yet</p>
+                  <div className="bg-white/40 rounded-2xl p-12 text-center border border-dashed border-gray-200 shadow-sm">
+                    <span className="material-icon text-3xl text-gray-300 block mb-2">location_off</span>
+                    <p className="text-gray-400 text-xs font-medium">No saved addresses found.</p>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                     {addresses.map((addr, i) => (
-                      <div key={i} className="bg-white border border-gray-200 rounded-2xl px-5 py-4 flex items-center gap-4">
-                        <svg className="w-5 h-5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        <div>
-                          <p className="font-medium text-sm text-gray-900">{addr.label}</p>
-                          {addr.addressType === 'MANUAL' && <p className="text-xs text-gray-500 mt-0.5">{addr.doorNo}, {addr.street}, {addr.city}, {addr.state} - {addr.pincode}</p>}
+                      <div key={i} className="bg-white/40 border border-white/60 rounded-2xl px-5 py-4 flex items-start gap-4 shadow-sm">
+                        <span className="material-icon text-lg text-[#ff6b35] mt-1">location_on</span>
+                        <div className="font-display">
+                          <p className="font-bold text-[#1e2229] text-sm">{addr.label}</p>
+                          {addr.addressType === 'MANUAL' && (
+                            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed font-medium">
+                              {addr.doorNo}, {addr.street}, {addr.city}, {addr.state} - {addr.pincode}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -103,22 +141,30 @@ export default function UserProfilePage() {
               </div>
             )}
 
+            {/* Video Import History */}
             {activeTab === 'history' && (
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-4">Recipe History</h3>
+              <div className="glass border border-white/60 rounded-3xl p-6 md:p-8 animate-fade-slide-up shadow-sm">
+                <h3 className="font-display font-extrabold text-lg text-[#1e2229] mb-6 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-[#ff6b35] rounded-full" />
+                  <span>Recipe Pipeline History</span>
+                </h3>
                 {recentRecipes.length === 0 ? (
-                  <div className="bg-gray-50 rounded-2xl p-12 text-center">
-                    <span className="text-3xl block mb-3">🕐</span>
-                    <p className="text-gray-500 text-sm">No recipes processed yet</p>
+                  <div className="bg-white/40 rounded-2xl p-12 text-center border border-dashed border-gray-200 shadow-sm">
+                    <span className="material-icon text-3xl text-gray-300 block mb-2">history</span>
+                    <p className="text-gray-400 text-xs font-medium">No pipeline history available.</p>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                     {recentRecipes.map((recipe, i) => (
-                      <div key={i} className="bg-white border border-gray-200 rounded-2xl p-3 flex items-center gap-4">
-                        <img src={recipe.thumbnailUrl} alt={recipe.title} className="w-20 h-14 rounded-xl object-cover flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-sm text-gray-900 truncate">{recipe.title}</h4>
-                          <p className="text-xs text-gray-500">{recipe.channelTitle}</p>
+                      <div key={i} className="bg-white/40 border border-white/60 rounded-2xl p-3 flex items-center gap-4 hover:border-[#ff6b35]/20 transition-all shadow-sm">
+                        <img 
+                          src={recipe.thumbnailUrl} 
+                          alt={recipe.title} 
+                          className="w-20 h-14 rounded-xl object-cover border border-gray-100 flex-shrink-0" 
+                        />
+                        <div className="flex-1 min-w-0 font-display">
+                          <h4 className="font-bold text-sm text-[#1e2229] truncate">{recipe.title}</h4>
+                          <p className="text-xs text-gray-400 mt-1 font-medium">{recipe.channelTitle || 'YouTube link'}</p>
                         </div>
                       </div>
                     ))}
@@ -127,24 +173,62 @@ export default function UserProfilePage() {
               </div>
             )}
 
+            {/* Bookmarked/favorites recipes */}
             {activeTab === 'favorites' && (
-              <div className="bg-gray-50 rounded-2xl p-12 text-center">
-                <span className="text-3xl block mb-3">❤️</span>
-                <p className="text-gray-500 text-sm">No favorite recipes yet</p>
-                <p className="text-xs text-gray-400 mt-1">Save recipes by clicking the bookmark icon</p>
+              <div className="glass border border-white/60 rounded-3xl p-6 md:p-8 animate-fade-slide-up shadow-sm">
+                <h3 className="font-display font-extrabold text-lg text-[#1e2229] mb-6 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-[#ff6b35] rounded-full" />
+                  <span>Favorite Saved Recipes</span>
+                </h3>
+                
+                {state.savedRecipes && state.savedRecipes.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {state.savedRecipes.map((recipe, i) => (
+                      <div 
+                        key={i} 
+                        className="bg-white/40 border border-white/60 rounded-2xl p-3 flex items-center gap-4 hover:border-[#ff6b35]/20 transition-all cursor-pointer shadow-sm"
+                        onClick={() => navigate(`/review/${recipe.videoId || recipe.id}`)}
+                      >
+                        <img 
+                          src={recipe.thumbnailUrl} 
+                          alt={recipe.title} 
+                          className="w-20 h-14 rounded-xl object-cover border border-gray-100 flex-shrink-0" 
+                        />
+                        <div className="flex-1 min-w-0 font-display">
+                          <h4 className="font-bold text-sm text-[#1e2229] truncate">{recipe.title}</h4>
+                          <p className="text-xs text-gray-400 mt-1 font-medium">Click to view details</p>
+                        </div>
+                        <span className="material-icon text-sm text-[#ff6b35] mr-2">arrow_forward</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white/40 rounded-2xl p-12 text-center border border-dashed border-gray-200 shadow-sm">
+                    <span className="material-icon text-3xl text-[#ff6b35] block mb-2">favorite_border</span>
+                    <p className="text-gray-400 text-xs font-bold font-display">No bookmark recipes saved yet.</p>
+                    <p className="text-gray-450 text-[10px] mt-1 font-display">Save items by checking the bookmark icon on reviews.</p>
+                  </div>
+                )}
               </div>
             )}
+
           </div>
+
         </div>
 
-        <div className="mt-6 mb-8 flex justify-center">
-          <button onClick={() => { dispatch({ type: 'LOGOUT' }); localStorage.removeItem('token'); navigate('/'); }}
-            className="px-8 py-3 rounded-xl border-2 border-red-200 text-red-500 font-medium text-sm hover:bg-red-50 transition-all flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            Logout
+        {/* Logout CTA */}
+        <div className="mt-10 mb-8 flex justify-center">
+          <button 
+            onClick={() => { dispatch({ type: 'LOGOUT' }); localStorage.removeItem('token'); navigate('/'); }}
+            className="px-8 py-3.5 rounded-xl border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-650 font-bold font-display text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm"
+          >
+            <span className="material-icon text-base">logout</span>
+            <span>Logout Account</span>
           </button>
         </div>
+
       </div>
+
       <BottomNav />
     </div>
   );

@@ -92,8 +92,6 @@ public class CartServiceImpl implements CartService {
                         unit = "unit";
                     }
                 }
-
-                // Map dynamic options directly from AI products
                 List<StoreProduct> matches = new ArrayList<>();
                 if (ing.getProducts() != null && !ing.getProducts().isEmpty()) {
                     for (StoreProduct ap : ing.getProducts()) {
@@ -106,7 +104,6 @@ public class CartServiceImpl implements CartService {
                     }
                 }
                 
-                // Determine the fallback brand dynamically based on category to satisfy the "no Store Brand for packaged products" rule
                 String fallbackBrand = "Store Brand";
                 if (category != null) {
                     String catLower = category.toLowerCase().trim();
@@ -148,7 +145,6 @@ public class CartServiceImpl implements CartService {
                     brandMatches = matches;
                 }
 
-                // Filter by variety if present
                 if (variety != null && !variety.trim().isEmpty()) {
                     final String finalVariety = variety.toLowerCase().trim();
                     List<StoreProduct> varietyFiltered = brandMatches.stream()
@@ -159,7 +155,6 @@ public class CartServiceImpl implements CartService {
                     }
                 }
 
-                // Filter by name/variety similarity if a specific variety is requested
                 List<StoreProduct> varietyMatches = brandMatches.stream()
                         .filter(p -> p.getName().equalsIgnoreCase(ing.getName()) || p.getName().equalsIgnoreCase(stdName))
                         .collect(Collectors.toList());
@@ -222,7 +217,7 @@ public class CartServiceImpl implements CartService {
                         ing.getRecipeUnit(),
                         qty,
                         unit,
-                        qty, // base quantity is initial quantity
+                        qty,
                         matches,
                         selectedProduct,
                         availableBrands,
@@ -326,26 +321,22 @@ public class CartServiceImpl implements CartService {
 
             final String prodName = item.getSelectedProduct() != null ? item.getSelectedProduct().getName() : "";
             
-            // Find product matching name/variety, brand and size
             StoreProduct match = item.getAvailableProducts().stream()
                     .filter(p -> p.getName().equals(prodName) && p.getBrand().equals(targetBrand) && p.getSize().equals(targetSize))
                     .findFirst().orElse(null);
 
-            // If not found, try brand and size only
             if (match == null) {
                 match = item.getAvailableProducts().stream()
                         .filter(p -> p.getBrand().equals(targetBrand) && p.getSize().equals(targetSize))
                         .findFirst().orElse(null);
             }
 
-            // If not found, try brand only (prefer same variety)
             if (match == null) {
                 match = item.getAvailableProducts().stream()
                         .filter(p -> p.getName().equals(prodName) && p.getBrand().equals(targetBrand))
                         .findFirst().orElse(null);
             }
 
-            // If not found, try any product matching brand
             if (match == null) {
                 match = item.getAvailableProducts().stream()
                         .filter(p -> p.getBrand().equals(targetBrand))
@@ -360,7 +351,6 @@ public class CartServiceImpl implements CartService {
             }
         }
 
-        // Update sizes dropdown list for selected product & brand
         if (item.getSelectedProduct() != null) {
             final String selectedName = item.getSelectedProduct().getName();
             final String selectedBrandName = item.getSelectedProduct().getBrand();

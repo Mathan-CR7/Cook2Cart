@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
+import PremiumBackground from '../components/PremiumBackground';
 import FAB from '../components/FAB';
 import { cartService } from '../utils/api';
 import DownloadButton from '../components/DownloadButton';
@@ -17,7 +19,7 @@ export default function RecipeReviewPage() {
   const [newStep, setNewStep] = useState('');
   const [justSaved, setJustSaved] = useState(false);
 
-  const ingredients = state.extractedIngredients;
+  const ingredients = state.extractedIngredients || [];
   const instructions = state.extractedInstructions || [];
   const isSaved = state.savedRecipes?.some(r => r.id === (state.selectedRecipe?.id || videoId));
 
@@ -62,9 +64,9 @@ export default function RecipeReviewPage() {
   };
 
   const getConfidenceColor = (score) => {
-    if (score >= 90) return 'text-green-600 bg-green-50';
-    if (score >= 75) return 'text-amber-600 bg-amber-50';
-    return 'text-red-600 bg-red-50';
+    if (score >= 90) return 'text-[#10b981] bg-[#10b981]/10 border-[#10b981]/20';
+    if (score >= 75) return 'text-amber-500 bg-amber-500/10 border-amber-500/20';
+    return 'text-[#ef4444] bg-[#ef4444]/10 border-[#ef4444]/20';
   };
 
   const generateCartItem = (ing) => {
@@ -200,255 +202,333 @@ export default function RecipeReviewPage() {
   };
 
   return (
-    <div className="bg-white min-h-screen pb-16">
+    <div className="c2c-root min-h-screen pb-32 overflow-x-hidden relative bg-[white]">
+      <PremiumBackground />
       <AppBar />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 relative z-10 animate-fade-slide-up font-display">
+        
+        {/* Header Block */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Review Ingredients & Instructions</h1>
-            <p className="text-gray-500 text-sm mt-1">Review the AI extracted ingredients and preparation steps below.</p>
+            <h1 className="font-display font-black text-3xl md:text-4xl text-[#1e2229]">Review AI Ingredients</h1>
+            <p className="text-gray-400 text-sm mt-1 font-display font-medium">Verify or adjust items and steps before generating your grocery cart.</p>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-50 text-green-700 rounded-full text-sm font-semibold self-start md:self-auto">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
-            AI Accuracy: 92%
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] text-xs font-bold uppercase tracking-wider">
+              <span className="material-icon text-xs fill">auto_awesome</span>
+              <span>AI confidence: 94%</span>
+            </span>
+          </div>
         </div>
 
-        {/* Side-by-Side Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        {/* Double-Panel Split Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
           
-          {/* Left Column: Ingredients */}
-          <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
-            {state.selectedRecipe?.title && (
-              <div className="mb-6 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm flex items-start justify-between gap-3">
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider font-semibold text-orange-600 block mb-1">Recipe Title</span>
-                  <h3 className="font-bold text-gray-900 text-base">{state.selectedRecipe.title}</h3>
+          {/* Left Panel: Ingredients (7 columns) */}
+          <div className="lg:col-span-7 glass p-6 rounded-3xl border border-white/60 flex flex-col justify-between shadow-sm">
+            <div>
+              
+              {/* Recipe card wrapper */}
+              {state.selectedRecipe?.title && (
+                <div className="mb-6 p-4 bg-white/40 border border-[#ff6b35]/8 rounded-2xl flex items-center justify-between gap-3 shadow-sm">
+                  <div className="min-w-0">
+                    <span className="text-[9px] uppercase font-bold tracking-wider text-gray-400 block mb-0.5 font-display">Active Recipe</span>
+                    <h3 className="font-display font-extrabold text-[#1e2229] text-sm truncate pr-2">{state.selectedRecipe.title}</h3>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <DownloadButton
+                      size="sm"
+                      recipe={{
+                        title: state.selectedRecipe?.title,
+                        ingredients: state.extractedIngredients,
+                        instructions: state.extractedInstructions || [],
+                      }}
+                    />
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleSaveRecipe}
+                      disabled={isSaved}
+                      className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        isSaved || justSaved
+                          ? 'bg-[#ff6b35]/10 text-[#ff6b35] border-[#ff6b35]/20'
+                          : 'bg-white border-gray-200 text-gray-400 hover:border-[#ff6b35]/30 hover:text-[#ff6b35]'
+                      }`}
+                    >
+                      <span className="material-icon text-xs">{isSaved || justSaved ? 'bookmark' : 'bookmark_border'}</span>
+                      <span>{justSaved ? 'Saved!' : isSaved ? 'Saved' : 'Save'}</span>
+                    </motion.button>
+                  </div>
                 </div>
-                {/* Action buttons row */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <DownloadButton
-                    size="sm"
-                    recipe={{
-                      title: state.selectedRecipe?.title,
-                      ingredients: state.extractedIngredients,
-                      instructions: state.extractedInstructions || [],
-                    }}
-                  />
-                  <button
-                    onClick={handleSaveRecipe}
-                    disabled={isSaved}
-                    title={isSaved ? 'Already saved' : 'Save this recipe'}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                      isSaved || justSaved
-                        ? 'bg-orange-500 text-white border-orange-500 cursor-default'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300'
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5" fill={isSaved || justSaved ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                    </svg>
-                    {justSaved ? 'Saved!' : isSaved ? 'Saved' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            )}
-            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="w-2 h-6 bg-orange-500 rounded-full inline-block"></span>
-              Ingredients ({ingredients.length})
-            </h2>
-
-            <div className="flex flex-col gap-2 mb-6">
-              {ingredients.length === 0 ? (
-                <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl">
-                  <span className="text-4xl block mb-3">🔍</span>
-                  <p className="text-gray-500">No ingredients detected yet.</p>
-                </div>
-              ) : (
-                ingredients.map((ing, i) => {
-                  const score = Math.round((ing.confidence || 0.95) <= 1 ? (ing.confidence || 0.95) * 100 : (ing.confidence || 0.95));
-                  const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : '');
-                  const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
-
-                  return (
-                    <div key={i} className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center gap-4 hover:border-orange-200 hover:shadow-md transition-all">
-                      <span className={`text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full ${getConfidenceColor(score)}`}>
-                        {score}% Match
-                      </span>
-
-                      {editing === i ? (
-                        <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          <input 
-                            type="text" 
-                            value={ing.name || ''} 
-                            onChange={(e) => handleUpdate(i, { name: e.target.value })} 
-                            placeholder="Ingredient Name"
-                            className="flex-1 px-3 py-1.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-900" 
-                          />
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="text" 
-                              value={displayQty} 
-                              onChange={(e) => handleUpdate(i, { recipeQuantity: e.target.value, quantity: e.target.value })} 
-                              placeholder="Qty"
-                              className="w-16 px-3 py-1.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-900" 
-                            />
-                            <input 
-                              type="text" 
-                              value={displayUnit} 
-                              onChange={(e) => handleUpdate(i, { recipeUnit: e.target.value, unit: e.target.value })} 
-                              placeholder="Unit"
-                              className="w-16 px-3 py-1.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-900" 
-                            />
-                          </div>
-                          <button onClick={() => setEditing(null)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex items-center gap-2 min-w-0">
-                          <span className="text-orange-600 font-bold text-sm min-w-[70px] flex-shrink-0">
-                            {displayQty} {displayUnit}
-                          </span>
-                          <span className="text-gray-900 text-sm truncate">{ing.name}</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => setEditing(editing === i ? null : i)} className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        </button>
-                        <button onClick={() => handleRemove(i)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
               )}
+
+              <h2 className="font-display font-black text-xl text-[#1e2229] mb-6 flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-[#ff6b35] rounded-full" />
+                <span>Extracted Ingredients ({ingredients.length})</span>
+              </h2>
+
+              {/* Ingredients List */}
+              <div className="flex flex-col gap-2.5 mb-6">
+                <AnimatePresence initial={false}>
+                  {ingredients.length === 0 ? (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="text-center py-16 bg-white/40 rounded-2xl border border-dashed border-gray-200 shadow-sm"
+                    >
+                      <span className="material-icon text-4xl text-gray-300 block mb-2">find_in_page</span>
+                      <p className="text-gray-400 text-xs font-medium">No ingredients detected.</p>
+                    </motion.div>
+                  ) : (
+                    ingredients.map((ing, i) => {
+                      const score = Math.round((ing.confidence || 0.95) <= 1 ? (ing.confidence || 0.95) * 100 : (ing.confidence || 0.95));
+                      const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : '');
+                      const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+
+                      return (
+                        <motion.div 
+                          key={ing.name || i}
+                          layout
+                          initial={{ opacity: 0, y: 15 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.25 }}
+                          className="bg-white/40 border border-white/60 rounded-2xl p-4 flex items-center justify-between gap-4 hover:border-[#ff6b35]/20 transition-all duration-300 shadow-sm"
+                        >
+                          
+                          {editing === i ? (
+                            <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <input 
+                                type="text" 
+                                value={ing.name || ''} 
+                                onChange={(e) => handleUpdate(i, { name: e.target.value })} 
+                                placeholder="Name"
+                                className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-[#1e2229] focus:outline-none focus:border-[#ff6b35]" 
+                              />
+                              <div className="flex items-center gap-2">
+                                <input 
+                                  type="text" 
+                                  value={displayQty} 
+                                  onChange={(e) => handleUpdate(i, { recipeQuantity: e.target.value, quantity: e.target.value })} 
+                                  placeholder="Qty"
+                                  className="w-16 bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-[#1e2229] focus:outline-none focus:border-[#ff6b35]" 
+                                />
+                                <input 
+                                  type="text" 
+                                  value={displayUnit} 
+                                  onChange={(e) => handleUpdate(i, { recipeUnit: e.target.value, unit: e.target.value })} 
+                                  placeholder="Unit"
+                                  className="w-16 bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-[#1e2229] focus:outline-none focus:border-[#ff6b35]" 
+                                />
+                              </div>
+                              <button 
+                                onClick={() => setEditing(null)} 
+                                className="p-1.5 bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] rounded-lg hover:bg-[#10b981]/20 cursor-pointer"
+                              >
+                                <span className="material-icon text-sm">check</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border flex-shrink-0 ${getConfidenceColor(score)}`}>
+                                {score}% Match
+                              </span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[#ff6b35] font-display font-extrabold text-sm flex-shrink-0">{displayQty} {displayUnit}</span>
+                                <span className="text-gray-700 text-sm font-semibold truncate">{ing.name}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button 
+                              onClick={() => setEditing(editing === i ? null : i)} 
+                              className="p-2 text-gray-400 hover:text-[#ff6b35] hover:bg-gray-50 rounded-xl transition-all border border-transparent hover:border-gray-200/50 cursor-pointer"
+                            >
+                              <span className="material-icon text-base">edit</span>
+                            </button>
+                            <button 
+                              onClick={() => handleRemove(i)} 
+                              className="p-2 text-gray-400 hover:text-[#ef4444] hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100/20 cursor-pointer"
+                            >
+                              <span className="material-icon text-base">delete</span>
+                            </button>
+                          </div>
+
+                        </motion.div>
+                      );
+                    })
+                  )}
+                </AnimatePresence>
+              </div>
+
             </div>
 
-            {/* Add Ingredient Form */}
-            <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <input type="text" value={newIng.name} onChange={(e) => setNewIng({ ...newIng, name: e.target.value })} placeholder="Ingredient name" className="flex-1 px-3 py-2 border-b-2 border-gray-200 text-sm focus:border-orange-500 focus:outline-none text-gray-900 placeholder-gray-400" />
-              <div className="flex items-center gap-2">
-                <input type="text" value={newIng.quantity} onChange={(e) => setNewIng({ ...newIng, quantity: e.target.value })} placeholder="Qty" className="w-20 px-3 py-2 border-b-2 border-gray-200 text-sm focus:border-orange-500 focus:outline-none text-gray-900 placeholder-gray-400" />
-                <input type="text" value={newIng.unit} onChange={(e) => setNewIng({ ...newIng, unit: e.target.value })} placeholder="Unit" className="w-20 px-3 py-2 border-b-2 border-gray-200 text-sm focus:border-orange-500 focus:outline-none text-gray-900 placeholder-gray-400" />
+            {/* Add ingredient details form */}
+            <div className="bg-white/50 border border-gray-200 border-dashed rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shadow-sm">
+              <input 
+                type="text" 
+                value={newIng.name} 
+                onChange={(e) => setNewIng({ ...newIng, name: e.target.value })} 
+                placeholder="New Ingredient Name" 
+                className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-[#ff6b35] placeholder-gray-450" 
+              />
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={newIng.quantity} 
+                  onChange={(e) => setNewIng({ ...newIng, quantity: e.target.value })} 
+                  placeholder="Qty" 
+                  className="w-16 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-[#ff6b35] placeholder-gray-450" 
+                />
+                <input 
+                  type="text" 
+                  value={newIng.unit} 
+                  onChange={(e) => setNewIng({ ...newIng, unit: e.target.value })} 
+                  placeholder="Unit" 
+                  className="w-16 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-[#ff6b35] placeholder-gray-450" 
+                />
               </div>
-              <button onClick={handleAdd} disabled={!newIng.name || !newIng.quantity} className="px-5 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-orange-100 hover:text-orange-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                + Add
+              <button 
+                onClick={handleAdd} 
+                disabled={!newIng.name || !newIng.quantity} 
+                className="px-4 py-2 gradient-bg text-white font-bold font-display rounded-xl text-xs hover:scale-[1.01] transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0 flex items-center justify-center gap-1 shadow-sm"
+              >
+                <span className="material-icon text-xs !text-white">add</span>
+                <span>Add Item</span>
               </button>
             </div>
+
           </div>
 
-          {/* Right Column: Instructions */}
-          <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
-            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="w-2 h-6 bg-orange-500 rounded-full inline-block"></span>
-              Instructions ({instructions.length} steps)
-            </h2>
+          {/* Right Panel: Preparation Steps Timeline (5 columns) */}
+          <div className="lg:col-span-5 glass p-6 rounded-3xl border border-white/60 flex flex-col justify-between shadow-sm">
+            <div>
+              <h2 className="font-display font-black text-xl text-[#1e2229] mb-6 flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-[#ff6b35] rounded-full" />
+                <span>Preparation Steps ({instructions.length})</span>
+              </h2>
 
-            <div className="flex flex-col gap-3 mb-6">
-              {instructions.length === 0 ? (
-                <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl">
-                  <span className="text-4xl block mb-3">🍳</span>
-                  <p className="text-gray-500">No instructions detected yet.</p>
-                </div>
-              ) : (
-                instructions.map((step, idx) => {
-                  const stepNum = String(idx + 1).padStart(2, '0');
-                  
-                  return (
-                    <div key={idx} className="bg-white border border-gray-200 rounded-2xl p-4 flex items-start gap-3.5 hover:border-orange-200 hover:shadow-md transition-all">
-                      {/* Step Number Badge */}
-                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-xs flex items-center justify-center">
-                        {stepNum}
-                      </span>
+              <div className="flex flex-col gap-3 mb-6 relative">
+                <AnimatePresence initial={false}>
+                  {instructions.length === 0 ? (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="text-center py-16 bg-white/40 rounded-2xl border border-dashed border-gray-200 shadow-sm"
+                    >
+                      <span className="material-icon text-4xl text-gray-300 block mb-2">receipt</span>
+                      <p className="text-gray-400 text-xs font-medium">No instructions parsed.</p>
+                    </motion.div>
+                  ) : (
+                    instructions.map((step, idx) => {
+                      const stepNum = String(idx + 1).padStart(2, '0');
+                      return (
+                        <motion.div 
+                          key={step.substring(0, 15) + "_" + idx}
+                          layout
+                          initial={{ opacity: 0, x: 15 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.25 }}
+                          className="bg-white/40 border border-white/60 rounded-2xl p-4 flex items-start gap-3.5 hover:border-[#ff6b35]/20 transition-all duration-300 shadow-sm"
+                        >
+                          {/* Timeline bubble badge */}
+                          <div className="w-7 h-7 rounded-full bg-[#ff6b35]/8 text-[#ff6b35] font-display font-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5 border border-[#ff6b35]/20">
+                            {stepNum}
+                          </div>
 
-                      {/* Step Content / Editor */}
-                      {editingInstruction === idx ? (
-                        <div className="flex-1 flex flex-col items-stretch gap-2">
-                          <textarea
-                            value={step}
-                            onChange={(e) => handleUpdateInstruction(idx, e.target.value)}
-                            rows={3}
-                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 text-gray-900 resize-none"
-                          />
-                          <button
-                            onClick={() => setEditingInstruction(null)}
-                            className="self-end px-4 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition-colors flex items-center gap-1"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                            Save Step
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex-1 min-w-0">
-                          <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">{step}</p>
-                        </div>
-                      )}
+                          {editingInstruction === idx ? (
+                            <div className="flex-1 flex flex-col gap-2">
+                              <textarea
+                                value={step}
+                                onChange={(e) => handleUpdateInstruction(idx, e.target.value)}
+                                rows={3}
+                                className="w-full bg-white border border-gray-200 rounded-xl p-3 text-xs text-gray-700 focus:outline-none focus:border-[#ff6b35] resize-none"
+                              />
+                              <button
+                                onClick={() => setEditingInstruction(null)}
+                                className="self-end px-3 py-1 bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] rounded-lg text-xs font-bold hover:bg-[#10b981]/20 transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <span className="material-icon text-xs">check</span>
+                                <span>Done</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex-1 min-w-0">
+                              <p className="text-gray-650 text-xs leading-relaxed font-display whitespace-pre-wrap">{step}</p>
+                            </div>
+                          )}
 
-                      {/* Controls */}
-                      {editingInstruction !== idx && (
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <button
-                            onClick={() => setEditingInstruction(idx)}
-                            className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                          </button>
-                          <button
-                            onClick={() => handleRemoveInstruction(idx)}
-                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+                          {editingInstruction !== idx && (
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => setEditingInstruction(idx)}
+                                className="p-1.5 text-gray-400 hover:text-[#ff6b35] hover:bg-gray-50 rounded-lg transition-all cursor-pointer"
+                              >
+                                <span className="material-icon text-sm">edit</span>
+                              </button>
+                              <button
+                                onClick={() => handleRemoveInstruction(idx)}
+                                className="p-1.5 text-gray-400 hover:text-[#ef4444] hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                              >
+                                <span className="material-icon text-sm">delete</span>
+                              </button>
+                            </div>
+                          )}
+
+                        </motion.div>
+                      );
+                    })
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
-            {/* Add Step Form */}
-            <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-4 flex items-stretch gap-3">
+            {/* Add step form field */}
+            <div className="bg-white/50 border border-gray-200 border-dashed rounded-2xl p-4 flex items-center gap-2 shadow-sm">
               <input
                 type="text"
                 value={newStep}
                 onChange={(e) => setNewStep(e.target.value)}
-                placeholder="Add next cooking step..."
-                className="flex-1 px-3 py-2 border-b-2 border-gray-200 text-sm focus:border-orange-500 focus:outline-none text-gray-900 placeholder-gray-400"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddInstruction();
-                  }
-                }}
+                placeholder="Add next instruction step..."
+                className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-[#ff6b35] placeholder-gray-500"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddInstruction()}
               />
               <button
                 onClick={handleAddInstruction}
                 disabled={!newStep.trim()}
-                className="px-5 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-orange-100 hover:text-orange-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+                className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-500 border border-gray-200 rounded-xl font-bold font-display text-xs hover:scale-[1.01] transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0 flex items-center justify-center gap-1"
               >
-                + Step
+                <span className="material-icon text-xs !text-gray-500">add</span>
+                <span>Add Step</span>
               </button>
             </div>
+
           </div>
 
         </div>
 
-        {/* Generate Shopping Cart Button */}
-        <div className="flex justify-center pb-12">
-          <button onClick={handleContinue} className="gradient-bg text-white py-4 px-10 rounded-2xl font-bold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 shadow-lg">
-            Generate Shopping Cart
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-          </button>
+        {/* Generate Cart CTA */}
+        <div className="flex justify-center pb-16">
+          <motion.button 
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={handleContinue} 
+            className="gradient-bg text-white font-display font-bold py-4.5 px-10 rounded-2xl text-sm flex items-center gap-2.5 shadow-[0_6px_25px_rgba(255,107,53,0.35)] cursor-pointer"
+          >
+            <span>Generate Shopping Cart</span>
+            <span className="material-icon text-base !text-white animate-float">arrow_forward</span>
+          </motion.button>
         </div>
+
       </div>
+
       <BottomNav />
       <FAB />
     </div>
   );
 }
-

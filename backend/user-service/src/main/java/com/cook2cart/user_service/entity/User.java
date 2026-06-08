@@ -28,6 +28,8 @@ public class User {
 
     private String authProvider; // LOCAL or GOOGLE
 
+    private String profileImage;
+
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)

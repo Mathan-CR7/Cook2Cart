@@ -3,12 +3,15 @@ package com.cook2cart.video_service.controller;
 import com.cook2cart.video_service.dto.YouTubeVideoDTO;
 import com.cook2cart.video_service.dto.VideoRequestDTO;
 import com.cook2cart.video_service.dto.VideoResponseDTO;
+import com.cook2cart.video_service.config.RedisCacheKeyUtil;
 import com.cook2cart.video_service.service.VideoService;
 import com.cook2cart.video_service.service.YouTubeSearchService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +31,7 @@ public class VideoController {
 
     private final YouTubeSearchService youTubeSearchService;
     private final VideoService videoService;
+    private final CacheManager cacheManager;
 
     @Value("${audio.output-dir}")
     private String audioOutputDir;
@@ -35,6 +39,11 @@ public class VideoController {
     @GetMapping("/search")
     public List<YouTubeVideoDTO> searchVideos(@RequestParam String query) {
         log.info("Search request received: {}", query);
+        Cache cache = cacheManager.getCache("youtubeSearch");
+        String cacheKey = RedisCacheKeyUtil.youtubeSearchKey(query);
+        if (cache != null && cache.get(cacheKey) != null) {
+            log.info("CACHE HIT: Returning result from Redis for key: {}", cacheKey);
+        }
         return youTubeSearchService.searchVideos(query);
     }
 
@@ -43,7 +52,7 @@ public class VideoController {
             throws Exception {
 
         log.info("Video process request received");
-        return videoService.processVideo(request.getUrl());
+        return videoService.processVideo(request.getUrl(), request.getUserId(), request.getVideoId());
     }
 
     @GetMapping("/download/audio")

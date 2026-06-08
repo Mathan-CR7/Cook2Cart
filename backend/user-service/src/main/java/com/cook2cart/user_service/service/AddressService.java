@@ -33,6 +33,7 @@ public class AddressService {
                 .state(request.getState())
                 .pincode(request.getPincode())
                 .addressType("MANUAL")
+                .isDefault(Boolean.TRUE.equals(request.getIsDefault()))
                 .createdAt(LocalDateTime.now())
                 .user(user)
                 .build();
@@ -52,6 +53,7 @@ public class AddressService {
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .addressType("CURRENT_LOCATION")
+                .isDefault(false)
                 .createdAt(LocalDateTime.now())
                 .user(user)
                 .build();

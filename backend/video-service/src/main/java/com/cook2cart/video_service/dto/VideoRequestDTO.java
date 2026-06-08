@@ -5,4 +5,6 @@ import lombok.Data;
 @Data
 public class VideoRequestDTO {
     private String url;
+    private Long userId;
+    private Long videoId;
 }

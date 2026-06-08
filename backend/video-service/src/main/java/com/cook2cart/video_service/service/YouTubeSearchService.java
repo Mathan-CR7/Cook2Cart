@@ -1,10 +1,12 @@
 package com.cook2cart.video_service.service;
 
 import com.cook2cart.video_service.dto.YouTubeVideoDTO;
+import com.cook2cart.video_service.search.VideoSearchService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -25,10 +27,16 @@ public class YouTubeSearchService {
     private String searchUrl;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final VideoSearchService videoSearchService;
 
+    @Cacheable(
+            cacheNames = "youtubeSearch",
+            key = "T(com.cook2cart.video_service.config.RedisCacheKeyUtil).youtubeSearchKey(#query)"
+    )
     public List<YouTubeVideoDTO> searchVideos(String query) {
 
         try {
+            log.info("CACHE MISS: Calling YouTube API and storing result in Redis for query: {}", query);
             String encodedQuery = URLEncoder.encode(query + " recipe", StandardCharsets.UTF_8);
 
             String url = searchUrl
@@ -73,6 +81,7 @@ public class YouTubeSearchService {
             }
 
             log.info("Fetched {} videos from YouTube", videos.size());
+            videoSearchService.indexYouTubeResults(query, videos);
 
             return videos;
 

@@ -6,8 +6,48 @@ import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
 import FAB from '../components/FAB';
-import { cartService } from '../utils/api';
+import { cartCatalogService, cartService, recipeCatalogService, videoCatalogService } from '../utils/api';
 import DownloadButton from '../components/DownloadButton';
+
+const toNumber = (value, fallback = 1) => {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const mapIngredientForRecipeDb = (ingredient) => ({
+  ingredientName: ingredient.name || ingredient.ingredientName || 'Ingredient',
+  recipeQuantity: toNumber(ingredient.recipeQuantity ?? ingredient.quantity, 1),
+  recipeUnit: ingredient.recipeUnit || ingredient.unit || 'pcs',
+  quantity: toNumber(ingredient.quantity ?? ingredient.recipeQuantity, 1),
+  unit: ingredient.unit || ingredient.recipeUnit || 'pcs',
+  estimated: Boolean(ingredient.estimated),
+  source: ingredient.source || 'user',
+  confidence: toNumber(ingredient.confidence, 1),
+});
+
+const mapCartItemForDb = (item, recipeId = null) => ({
+  ingredientId: item.ingredientId || item.dbIngredientId || null,
+  selectedProductId: item.selectedProductId || null,
+  recipeId: recipeId || item.recipeId || null,
+  ingredientName: item.originalName || item.ingredientName || item.name || item.selectedProduct?.name || 'Ingredient',
+  recipeQuantity: toNumber(item.recipeQuantity ?? item.quantity, 1),
+  recipeUnit: item.recipeUnit || item.unit || 'pcs',
+  quantity: toNumber(item.quantity ?? item.recipeQuantity, 1),
+  unit: item.unit || item.recipeUnit || 'pcs',
+  price: toNumber(item.price, 0) * toNumber(item.qty, 1),
+  estimatedPrice: toNumber(item.price, 0) * toNumber(item.qty, 1),
+  availableAtHome: Boolean(item.availableAtHome),
+  selectedProduct: item.selectedProduct ? {
+    ingredientId: item.ingredientId || item.dbIngredientId || null,
+    productName: item.selectedProduct.name || item.selectedProduct.productName || item.originalName || item.name || 'Product',
+    brand: item.selectedProduct.brand || 'Generic',
+    size: item.selectedProduct.size || `${item.quantity || item.recipeQuantity || 1} ${item.unit || item.recipeUnit || 'pcs'}`,
+    price: toNumber(item.selectedProduct.price ?? item.price, 0),
+    imageUrl: item.selectedProduct.imageUrl || item.selectedProduct.image || null,
+    source: item.selectedProduct.source || 'Cook2Cart',
+    availability: item.selectedProduct.availability || 'AVAILABLE',
+  } : null,
+});
 
 export default function RecipeReviewPage() {
   const navigate = useNavigate();
@@ -21,12 +61,15 @@ export default function RecipeReviewPage() {
 
   const ingredients = state.extractedIngredients || [];
   const instructions = state.extractedInstructions || [];
-  const isSaved = state.savedRecipes?.some(r => r.id === (state.selectedRecipe?.id || videoId));
+  const localRecipeId = state.selectedRecipe?.id || videoId;
+  const isSaved = state.savedRecipes?.some(r => String(r.id) === String(localRecipeId));
 
-  const handleSaveRecipe = () => {
+  const handleSaveRecipe = async () => {
     const recipe = {
-      id: state.selectedRecipe?.id || videoId,
+      id: localRecipeId,
       videoId: state.selectedRecipe?.videoId || videoId,
+      dbRecipeId: state.selectedRecipe?.dbRecipeId || null,
+      dbVideoId: state.selectedRecipe?.dbVideoId || null,
       title: state.selectedRecipe?.title || 'My Recipe',
       thumbnailUrl: state.selectedRecipe?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       savedAt: new Date().toISOString(),
@@ -36,6 +79,56 @@ export default function RecipeReviewPage() {
     dispatch({ type: 'SAVE_RECIPE', payload: recipe });
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
+
+    const saveVideoAction = async () => {
+      if (!state.user?.id) return;
+      let dbVideoId = state.selectedRecipe?.dbVideoId;
+
+      if (!dbVideoId) {
+        const response = await videoCatalogService.saveVideo({
+          youtubeVideoId: recipe.videoId,
+          title: recipe.title,
+          channelName: state.selectedRecipe?.channelTitle || state.selectedRecipe?.channelName || 'Cook2Cart',
+          thumbnailUrl: recipe.thumbnailUrl,
+          videoUrl: state.selectedRecipe?.videoUrl || `https://www.youtube.com/watch?v=${recipe.videoId}`,
+          duration: state.selectedRecipe?.duration || null,
+        });
+        dbVideoId = response.data.id;
+      }
+
+      await videoCatalogService.saveUserAction({
+        userId: state.user.id,
+        videoId: dbVideoId,
+        actionType: 'SAVED',
+      });
+    };
+
+    try {
+      await saveVideoAction();
+      let recipeId = state.selectedRecipe?.dbRecipeId;
+
+      if (!recipeId) {
+        const response = await recipeCatalogService.createRecipe({
+          userId: state.user?.id || null,
+          videoId: state.selectedRecipe?.dbVideoId || null,
+          recipeName: recipe.title,
+          cuisine: null,
+          thumbnailUrl: recipe.thumbnailUrl,
+          ingredients: state.extractedIngredients.map(mapIngredientForRecipeDb),
+          instructions: state.extractedInstructions || [],
+        });
+        recipeId = response.data.id;
+        recipe.dbRecipeId = recipeId;
+        dispatch({ type: 'SAVE_RECIPE', payload: recipe });
+        dispatch({
+          type: 'SET_SELECTED_RECIPE',
+          payload: { ...state.selectedRecipe, dbRecipeId: recipeId },
+        });
+      }
+
+    } catch (err) {
+      console.error('Failed to save recipe favorite to database, local save completed:', err);
+    }
   };
 
   const handleUpdate = (index, data) => dispatch({ type: 'UPDATE_INGREDIENT', payload: { index, data } });
@@ -156,6 +249,7 @@ export default function RecipeReviewPage() {
     const selectedProduct = availableProducts.find(p => p.brand === selectedBrand && p.size === selectedSize) || availableProducts[0];
 
     return {
+      ingredientId: ing.ingredientId || ing.dbIngredientId || null,
       ingredientName: name,
       originalName: ing.name,
       recipeQuantity: parseFloat(displayQty) || 1,
@@ -182,6 +276,7 @@ export default function RecipeReviewPage() {
         const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
         const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
         return {
+          ingredientId: ing.ingredientId || ing.dbIngredientId || null,
           name: ing.name,
           recipeQuantity: parseFloat(displayQty) || 1,
           recipeUnit: displayUnit,
@@ -192,11 +287,27 @@ export default function RecipeReviewPage() {
       });
       const response = await cartService.initialize(formattedIngredients, 4);
       dispatch({ type: 'SET_CART', payload: response.data });
+      const generatedItems = Array.isArray(response.data) ? response.data : (response.data?.items || []);
+      const dbItems = generatedItems.map((item) => mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null));
+      if (dbItems.length > 0) {
+        cartCatalogService.createCart({
+          userId: state.user?.id || null,
+          items: dbItems,
+        }).catch((err) => {
+          console.error('Failed to save generated cart to database, continuing:', err);
+        });
+      }
       navigate(`/cart/${videoId}`);
     } catch (err) {
       console.error('Failed to initialize cart on backend, falling back to local simulation:', err);
       const cart = ingredients.map(ing => generateCartItem(ing));
       dispatch({ type: 'SET_CART', payload: cart });
+      cartCatalogService.createCart({
+        userId: state.user?.id || null,
+        items: cart.map((item) => mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null)),
+      }).catch((saveErr) => {
+        console.error('Failed to save fallback cart to database, continuing:', saveErr);
+      });
       navigate(`/cart/${videoId}`);
     }
   };

@@ -3,6 +3,7 @@ package com.cook2cart.cart_service.dto;
 import java.util.List;
 
 public class CartItem {
+    private Long ingredientId;
     private String ingredientName;
     private String originalName;
     private Double recipeQuantity;
@@ -23,7 +24,8 @@ public class CartItem {
     public CartItem() {
     }
 
-    public CartItem(String ingredientName, String originalName, Double recipeQuantity, String recipeUnit, Double quantity, String unit, Double baseQuantity, List<StoreProduct> availableProducts, StoreProduct selectedProduct, List<String> availableBrands, String selectedBrand, List<String> availableSizes, String selectedSize, double price, boolean availableAtHome, List<String> recommendedBrands) {
+    public CartItem(Long ingredientId, String ingredientName, String originalName, Double recipeQuantity, String recipeUnit, Double quantity, String unit, Double baseQuantity, List<StoreProduct> availableProducts, StoreProduct selectedProduct, List<String> availableBrands, String selectedBrand, List<String> availableSizes, String selectedSize, double price, boolean availableAtHome, List<String> recommendedBrands) {
+        this.ingredientId = ingredientId;
         this.ingredientName = ingredientName;
         this.originalName = originalName;
         this.recipeQuantity = recipeQuantity;
@@ -40,6 +42,14 @@ public class CartItem {
         this.price = price;
         this.availableAtHome = availableAtHome;
         this.recommendedBrands = recommendedBrands;
+    }
+
+    public Long getIngredientId() {
+        return ingredientId;
+    }
+
+    public void setIngredientId(Long ingredientId) {
+        this.ingredientId = ingredientId;
     }
 
     public String getIngredientName() {

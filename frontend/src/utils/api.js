@@ -7,6 +7,17 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+export const getApiErrorMessage = (error, fallback = 'Something went wrong.') => {
+  const data = error?.response?.data;
+
+  if (typeof data === 'string') return data;
+  if (typeof data?.message === 'string') return data.message;
+  if (typeof data?.error === 'string') return data.error;
+  if (typeof error?.message === 'string') return error.message;
+
+  return fallback;
+};
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -29,6 +40,17 @@ api.interceptors.response.use(
 export const videoService = {
   search: (query) => api.get('/video/search', { params: { query } }),
   process: (url) => api.post('/video/process', { url }),
+  suggestions: (prefix) => api.get('/video/suggestions', { params: { prefix } }),
+};
+
+export const videoCatalogService = {
+  saveVideo: (data) => api.post('/api/videos', data),
+  getVideos: () => api.get('/api/videos'),
+  saveProcessedVideo: (data) => api.post('/api/videos/processed', data),
+  getProcessedVideosByUser: (userId) => api.get(`/api/videos/processed/user/${userId}`),
+  saveUserAction: (data) => api.post('/api/videos/actions', data),
+  getUserActions: (userId, actionType) => api.get(`/api/videos/actions/user/${userId}`, { params: { actionType } }),
+  deleteUserAction: (userId, videoId, actionType) => api.delete('/api/videos/actions', { params: { userId, videoId, actionType } }),
 };
 
 export const authService = {
@@ -45,9 +67,15 @@ export const addressService = {
 };
 
 export const aiService = {
-  processAudio: (formData) => api.post('/api/ai/recipe/process', formData, {
+  processAudio: (formData, videoId) => api.post('/api/ai/recipe/process', formData, {
+    params: videoId ? { videoId } : undefined,
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+};
+
+export const recipeCatalogService = {
+  createRecipe: (data) => api.post('/api/recipes', data),
+  getRecipesByUser: (userId) => api.get(`/api/recipes/user/${userId}`),
 };
 
 export const cartService = {
@@ -55,6 +83,13 @@ export const cartService = {
   scale: (cart, targetServings) => api.post('/api/cart/scale', cart, { params: { targetServings } }),
   updateItem: (cart, index, params) => api.put(`/api/cart/items/${index}`, cart, { params }),
   removeItem: (cart, index) => api.delete(`/api/cart/items/${index}`, { data: cart }),
+};
+
+export const cartCatalogService = {
+  createCart: (data) => api.post('/api/carts', data),
+  getCart: (cartId) => api.get(`/api/carts/${cartId}`),
+  getCartsByUser: (userId) => api.get(`/api/carts/user/${userId}`),
+  updateStatus: (cartId, status) => api.patch(`/api/carts/${cartId}/status`, null, { params: { status } }),
 };
 
 export default api;

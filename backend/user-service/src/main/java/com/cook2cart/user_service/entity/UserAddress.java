@@ -35,6 +35,8 @@ public class UserAddress {
 
     private String addressType; // CURRENT_LOCATION or MANUAL
 
+    private Boolean isDefault;
+
     private LocalDateTime createdAt;
 
     @ManyToOne

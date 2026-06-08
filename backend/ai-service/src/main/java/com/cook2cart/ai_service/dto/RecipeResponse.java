@@ -1,30 +1,20 @@
 package com.cook2cart.ai_service.dto;
 
-import com.cook2cart.ai_service.util.IngredientsConverter;
-import com.cook2cart.ai_service.util.InstructionsConverter;
-import jakarta.persistence.*;
 import java.util.List;
 import java.util.Objects;
 
-@Entity
-@Table(name = "recipes")
 public class RecipeResponse {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String languageDetected;
 
-    @Column(columnDefinition = "TEXT")
     private String englishTranscript;
 
-    @Column(columnDefinition = "TEXT")
-    @Convert(converter = IngredientsConverter.class)
+    private Double confidenceScore;
+
     private List<Ingredient> ingredients;
 
-    @Column(columnDefinition = "TEXT")
-    @Convert(converter = InstructionsConverter.class)
     private List<String> instructions;
 
     public RecipeResponse() {
@@ -33,6 +23,14 @@ public class RecipeResponse {
     public RecipeResponse(String languageDetected, String englishTranscript, List<Ingredient> ingredients, List<String> instructions) {
         this.languageDetected = languageDetected;
         this.englishTranscript = englishTranscript;
+        this.ingredients = ingredients;
+        this.instructions = instructions;
+    }
+
+    public RecipeResponse(String languageDetected, String englishTranscript, Double confidenceScore, List<Ingredient> ingredients, List<String> instructions) {
+        this.languageDetected = languageDetected;
+        this.englishTranscript = englishTranscript;
+        this.confidenceScore = confidenceScore;
         this.ingredients = ingredients;
         this.instructions = instructions;
     }
@@ -51,6 +49,14 @@ public class RecipeResponse {
 
     public void setEnglishTranscript(String englishTranscript) {
         this.englishTranscript = englishTranscript;
+    }
+
+    public Double getConfidenceScore() {
+        return confidenceScore;
+    }
+
+    public void setConfidenceScore(Double confidenceScore) {
+        this.confidenceScore = confidenceScore;
     }
 
     public List<Ingredient> getIngredients() {
@@ -84,13 +90,14 @@ public class RecipeResponse {
         RecipeResponse that = (RecipeResponse) o;
         return Objects.equals(languageDetected, that.languageDetected) &&
                 Objects.equals(englishTranscript, that.englishTranscript) &&
+                Objects.equals(confidenceScore, that.confidenceScore) &&
                 Objects.equals(ingredients, that.ingredients) &&
                 Objects.equals(instructions, that.instructions);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(languageDetected, englishTranscript, ingredients, instructions);
+        return Objects.hash(languageDetected, englishTranscript, confidenceScore, ingredients, instructions);
     }
 
     @Override
@@ -98,6 +105,7 @@ public class RecipeResponse {
         return "RecipeResponse{" +
                 "languageDetected='" + languageDetected + '\'' +
                 ", englishTranscript='" + englishTranscript + '\'' +
+                ", confidenceScore=" + confidenceScore +
                 ", ingredients=" + ingredients +
                 ", instructions=" + instructions +
                 '}';

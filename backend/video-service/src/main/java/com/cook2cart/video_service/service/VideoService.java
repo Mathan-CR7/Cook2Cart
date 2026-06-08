@@ -1,7 +1,10 @@
 package com.cook2cart.video_service.service;
 
 import com.cook2cart.video_service.dto.VideoResponseDTO;
+import com.cook2cart.video_service.kafka.event.VideoAudioReadyEvent;
+import com.cook2cart.video_service.kafka.producer.VideoAudioReadyProducer;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,11 +14,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
+@RequiredArgsConstructor
 public class VideoService {
 
     private static final Logger log = LoggerFactory.getLogger(VideoService.class);
@@ -29,8 +34,16 @@ public class VideoService {
     @Value("${audio.output-dir}")
     private String audioOutputDir;
 
+    @Value("${ffmpeg.path:ffmpeg}")
+    private String ffmpegPath;
+
+    @Value("${yt-dlp.path:yt-dlp}")
+    private String ytDlpPath;
+
     private File resolvedVideoDir;
     private File resolvedAudioDir;
+
+    private final VideoAudioReadyProducer videoAudioReadyProducer;
 
     @PostConstruct
     public void init() {
@@ -50,6 +63,10 @@ public class VideoService {
     }
 
     public VideoResponseDTO processVideo(String youtubeUrl) throws Exception {
+        return processVideo(youtubeUrl, null, null);
+    }
+
+    public VideoResponseDTO processVideo(String youtubeUrl, Long userId, Long videoId) throws Exception {
 
         log.info("Video processing started for URL: {}", youtubeUrl);
 
@@ -59,6 +76,7 @@ public class VideoService {
 
         downloadVideo(youtubeUrl, videoPath);
         extractAudio(videoPath, audioPath);
+        publishAudioReadyEvent(userId, videoId, youtubeUrl, videoPath, audioPath);
 
         log.info("Video processing completed successfully");
 
@@ -70,16 +88,31 @@ public class VideoService {
         );
     }
 
+    private void publishAudioReadyEvent(Long userId, Long videoId, String videoUrl, String videoPath, String audioPath) {
+        VideoAudioReadyEvent event = VideoAudioReadyEvent.builder()
+                .userId(userId)
+                .videoId(videoId)
+                .videoUrl(videoUrl)
+                .videoPath(videoPath)
+                .audioPath(audioPath)
+                .status("AUDIO_READY")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        videoAudioReadyProducer.publish(event);
+    }
+
     private void downloadVideo(String youtubeUrl, String outputPath) throws Exception {
 
         log.info("Starting video download...");
 
         ProcessBuilder processBuilder = new ProcessBuilder(
-                "yt-dlp",
+                ytDlpPath,
                 "-f",
-                "best[height<=480]",
+                "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
                 "--merge-output-format",
                 "mp4",
+                "--no-playlist",
                 "--force-overwrites",
                 "-o",
                 outputPath,
@@ -96,7 +129,7 @@ public class VideoService {
         log.info("Starting audio extraction...");
 
         ProcessBuilder processBuilder = new ProcessBuilder(
-                "ffmpeg",
+                ffmpegPath,
                 "-y",
                 "-i",
                 videoPath,

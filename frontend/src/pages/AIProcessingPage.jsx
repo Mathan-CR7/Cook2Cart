@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import api, { videoService, aiService } from '../utils/api';
+import api, { videoService, aiService, videoCatalogService, recipeCatalogService } from '../utils/api';
 import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
 const STEPS = [
@@ -54,29 +54,100 @@ const SAMPLE_INSTRUCTIONS_HI = [
   "पास्ता, सब्जियां और सॉस मिलाएं, फिर परोसें।"
 ];
 
+const toNumber = (value, fallback = 1) => {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const mapIngredientForDb = (ingredient) => ({
+  ingredientName: ingredient.name || ingredient.ingredientName || 'Ingredient',
+  recipeQuantity: toNumber(ingredient.recipeQuantity ?? ingredient.quantity, 1),
+  recipeUnit: ingredient.recipeUnit || ingredient.unit || 'pcs',
+  quantity: toNumber(ingredient.quantity ?? ingredient.recipeQuantity, 1),
+  unit: ingredient.unit || ingredient.recipeUnit || 'pcs',
+  estimated: Boolean(ingredient.estimated),
+  source: ingredient.source || 'ai',
+  confidence: toNumber(ingredient.confidence, 0),
+});
+
+const mergeSavedIngredientIds = (ingredients = [], savedIngredients = []) => {
+  const byName = new Map(
+    savedIngredients
+      .filter((item) => item.ingredientName && item.ingredientId)
+      .map((item) => [item.ingredientName.toLowerCase(), item])
+  );
+
+  return ingredients.map((ingredient) => {
+    const name = ingredient.name || ingredient.ingredientName || '';
+    const saved = byName.get(name.toLowerCase());
+    return saved
+      ? { ...ingredient, ingredientId: saved.ingredientId, dbIngredientId: saved.ingredientId }
+      : ingredient;
+  });
+};
+
 export default function AIProcessingPage() {
   const navigate = useNavigate();
   const { videoId } = useParams();
   const locationState = useLocation().state;
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const [currentStep, setCurrentStep] = useState(-1);
   const [progress, setProgress] = useState(0);
   const [statusMsg, setStatusMsg] = useState('Analyzing the video to extract ingredients');
 
   useEffect(() => {
-    let active = true;
-
     async function processRecipe() {
       dispatch({ type: 'START_AI_PROCESSING' });
 
       const youtubeUrl = locationState?.videoUrl || locationState?.url || `https://www.youtube.com/watch?v=${videoId}`;
       const videoTitle = simplifyRecipeTitle(locationState?.title) || 'My Recipe';
+      const userId = state.user?.id || null;
+      let dbVideoId = locationState?.dbVideoId || null;
+      let dbRecipeId = null;
+
+      const saveVideoMetadata = async () => {
+        if (dbVideoId) return dbVideoId;
+
+        const response = await videoCatalogService.saveVideo({
+          youtubeVideoId: videoId,
+          title: videoTitle,
+          channelName: locationState?.channelTitle || locationState?.channelName || 'Cook2Cart',
+          thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          videoUrl: youtubeUrl,
+          duration: locationState?.duration || null,
+        });
+
+        dbVideoId = response.data.id;
+        return dbVideoId;
+      };
+
+      const saveRecipeToDb = async (ingredients, instructions = []) => {
+        try {
+          const savedVideoId = await saveVideoMetadata();
+          const response = await recipeCatalogService.createRecipe({
+            userId,
+            videoId: savedVideoId,
+            recipeName: videoTitle,
+            cuisine: null,
+            thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+            ingredients: (ingredients || []).map(mapIngredientForDb),
+            instructions,
+          });
+          dbRecipeId = response.data.id;
+          return response.data;
+        } catch (err) {
+          console.error('Failed to save extracted recipe, continuing:', err);
+          return null;
+        }
+      };
 
       dispatch({
         type: 'SET_SELECTED_RECIPE',
         payload: {
           id: videoId,
           videoId: videoId,
+          dbVideoId,
+          dbRecipeId,
           title: videoTitle,
           thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
         }
@@ -84,24 +155,41 @@ export default function AIProcessingPage() {
 
       try {
         // Step 1: Downloading Video & Step 2: Extracting Audio
-        if (!active) return;
         setCurrentStep(0);
         dispatch({ type: 'SET_AI_STEP', payload: 0 });
         setProgress(20);
         setStatusMsg('Downloading video from YouTube...');
+        try {
+          await saveVideoMetadata();
+        } catch (err) {
+          console.error('Failed to save video metadata before processing, continuing:', err);
+        }
         const videoResponse = await videoService.process(youtubeUrl);
+        const audioPathFromProcess = videoResponse.data ? videoResponse.data.audioPath : null;
+        const videoPathFromProcess = videoResponse.data ? videoResponse.data.videoPath : null;
 
-        if (!active) return;
+        if (dbVideoId) {
+          videoCatalogService.saveProcessedVideo({
+            userId,
+            videoId: dbVideoId,
+            audioPath: audioPathFromProcess,
+            videoPath: videoPathFromProcess,
+            s3Url: videoResponse.data?.s3Url || null,
+            status: 'COMPLETED',
+          }).catch((err) => {
+            console.error('Failed to save processed video metadata, continuing:', err);
+          });
+        }
+
         setCurrentStep(1);
         dispatch({ type: 'SET_AI_STEP', payload: 1 });
         setProgress(40);
         setStatusMsg('Extracting audio track...');
-        const audioPath = videoResponse.data ? videoResponse.data.audioPath : null;
+        const audioPath = audioPathFromProcess;
         const filename = audioPath ? audioPath.substring(Math.max(audioPath.lastIndexOf('/'), audioPath.lastIndexOf('\\')) + 1) : 'recipe.mp3';
         const audioResponse = await api.get('/video/download/audio', { params: { filename }, responseType: 'blob' });
 
         // Step 3: Understanding Recipe & Step 4: Detecting Ingredients
-        if (!active) return;
         setCurrentStep(2);
         dispatch({ type: 'SET_AI_STEP', payload: 2 });
         setProgress(60);
@@ -111,14 +199,12 @@ export default function AIProcessingPage() {
         const sanitizedTitle = videoTitle.replace(/[^a-zA-Z0-9]/g, '_');
         formData.append('file', audioResponse.data, `${sanitizedTitle}.mp3`);
 
-        if (!active) return;
         setCurrentStep(3);
         dispatch({ type: 'SET_AI_STEP', payload: 3 });
         setProgress(80);
         setStatusMsg('Detecting ingredients and quantities...');
-        const aiResponse = await aiService.processAudio(formData);
+        const aiResponse = await aiService.processAudio(formData, videoId);
 
-        if (!active) return;
         setCurrentStep(4);
         dispatch({ type: 'SET_AI_STEP', payload: 4 });
         setProgress(100);
@@ -139,20 +225,48 @@ export default function AIProcessingPage() {
             SAMPLE_INSTRUCTIONS_EN;
         }
 
+        const savedRecipe = await saveRecipeToDb(aiResponse.data.ingredients, instructions);
+        const dbIngredients = mergeSavedIngredientIds(aiResponse.data.ingredients, savedRecipe?.ingredients || []);
+
+        dispatch({
+          type: 'SET_SELECTED_RECIPE',
+          payload: {
+            id: videoId,
+            videoId,
+            dbVideoId,
+            dbRecipeId,
+            title: videoTitle,
+            thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          },
+        });
+
         dispatch({ 
           type: 'FINISH_AI_PROCESSING', 
           payload: {
-            ingredients: aiResponse.data.ingredients,
+            ingredients: dbIngredients,
             instructions: instructions
           }
         });
         setTimeout(() => {
-          if (active) navigate(`/review/${videoId}`);
+          navigate(`/review/${videoId}`);
         }, 1200);
 
       } catch (err) {
         console.error('Error processing recipe through backend:', err);
-        if (!active) return;
+
+        try {
+          const failedVideoId = await saveVideoMetadata();
+          await videoCatalogService.saveProcessedVideo({
+            userId,
+            videoId: failedVideoId,
+            audioPath: null,
+            videoPath: null,
+            s3Url: null,
+            status: 'FAILED',
+          });
+        } catch (saveErr) {
+          console.error('Failed to save failed processed video metadata:', saveErr);
+        }
         
         let errorMsg = 'Failed to connect to backend AI service. Falling back to local simulation...';
         if (err.response) {
@@ -196,15 +310,30 @@ export default function AIProcessingPage() {
                 detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
                 SAMPLE_INSTRUCTIONS_EN;
 
-              dispatch({ 
-                type: 'FINISH_AI_PROCESSING', 
-                payload: {
-                  ingredients: SAMPLE_INGREDIENTS,
-                  instructions: fallbackInstructions
-                }
+              saveRecipeToDb(SAMPLE_INGREDIENTS, fallbackInstructions).then((savedRecipe) => {
+                const dbIngredients = mergeSavedIngredientIds(SAMPLE_INGREDIENTS, savedRecipe?.ingredients || []);
+                dispatch({
+                  type: 'SET_SELECTED_RECIPE',
+                  payload: {
+                    id: videoId,
+                    videoId,
+                    dbVideoId,
+                    dbRecipeId,
+                    title: videoTitle,
+                    thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+                  },
+                });
+
+                dispatch({ 
+                  type: 'FINISH_AI_PROCESSING', 
+                  payload: {
+                    ingredients: dbIngredients,
+                    instructions: fallbackInstructions
+                  }
+                });
               });
               setTimeout(() => {
-                if (active) navigate(`/review/${videoId}`);
+                navigate(`/review/${videoId}`);
               }, 1200);
             }
             step++;
@@ -216,10 +345,6 @@ export default function AIProcessingPage() {
     }
 
     processRecipe();
-
-    return () => {
-      active = false;
-    };
   }, [videoId, locationState, dispatch, navigate]);
 
   return (

@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import DownloadButton from '../components/DownloadButton';
+import { videoCatalogService } from '../utils/api';
 
 export default function FavoritesPage() {
   const navigate = useNavigate();
@@ -12,12 +13,17 @@ export default function FavoritesPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
 
-  const handleRemove = (id) => {
-    setRemovingId(id);
+  const handleRemove = (recipe) => {
+    setRemovingId(recipe.id);
+    if (state.user?.id && recipe.dbVideoId) {
+      videoCatalogService.deleteUserAction(state.user.id, recipe.dbVideoId, 'SAVED').catch((err) => {
+        console.error('Failed to remove saved recipe from database:', err);
+      });
+    }
     setTimeout(() => {
-      dispatch({ type: 'REMOVE_SAVED_RECIPE', payload: id });
+      dispatch({ type: 'REMOVE_SAVED_RECIPE', payload: recipe.id });
       setRemovingId(null);
-      if (expandedId === id) setExpandedId(null);
+      if (expandedId === recipe.id) setExpandedId(null);
     }, 300);
   };
 
@@ -128,7 +134,7 @@ export default function FavoritesPage() {
 
                       {/* Remove */}
                       <button
-                        onClick={() => handleRemove(recipe.id)}
+                        onClick={() => handleRemove(recipe)}
                         className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all"
                         title="Remove from saved"
                       >

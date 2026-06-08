@@ -5,7 +5,7 @@ import jakarta.persistence.*;
 import java.util.List;
 
 @Entity
-@Table(name = "carts")
+@Table(name = "generated_carts")
 public class Cart {
 
     @Id

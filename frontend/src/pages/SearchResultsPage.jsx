@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import RecipeCard from '../components/RecipeCard';
-import { videoService } from '../utils/api';
+import { getApiErrorMessage, videoService } from '../utils/api';
 
 export default function SearchResultsPage() {
   const navigate = useNavigate();
@@ -15,6 +15,10 @@ export default function SearchResultsPage() {
   const [error, setError] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(true);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const recognitionRef = useRef(null);
 
   useEffect(() => {
@@ -39,7 +43,7 @@ export default function SearchResultsPage() {
       .catch((err) => {
         if (cancelled) return;
         setResults([]);
-        setError(err.response?.data?.message || err.response?.data || 'Failed to fetch videos. Make sure video-service is running.');
+        setError(getApiErrorMessage(err, 'Failed to fetch videos. Make sure video-service is running.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -50,11 +54,75 @@ export default function SearchResultsPage() {
     };
   }, [query]);
 
+  useEffect(() => {
+    const prefix = searchInput.trim();
+
+    if (prefix.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setActiveSuggestion(-1);
+      return;
+    }
+
+    let cancelled = false;
+    setSuggestionsLoading(true);
+    const timeoutId = setTimeout(() => {
+      videoService.suggestions(prefix)
+        .then((res) => {
+          if (cancelled) return;
+          const nextSuggestions = Array.isArray(res.data) ? res.data : [];
+          setSuggestions(nextSuggestions);
+          setShowSuggestions(nextSuggestions.length > 0);
+          setActiveSuggestion(-1);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error('Failed to load search suggestions:', err);
+          setSuggestions([]);
+          setShowSuggestions(false);
+        })
+        .finally(() => {
+          if (!cancelled) setSuggestionsLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
   const handleSearch = (e) => {
     e.preventDefault();
     const nextQuery = searchInput.trim();
     if (!nextQuery) return;
+    setShowSuggestions(false);
     navigate(`/search?q=${encodeURIComponent(nextQuery)}`);
+  };
+
+  const handleSuggestionSelect = (suggestion) => {
+    setSearchInput(suggestion);
+    setShowSuggestions(false);
+    setActiveSuggestion(-1);
+    navigate(`/search?q=${encodeURIComponent(suggestion)}`);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveSuggestion((current) => (current + 1) % suggestions.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSuggestion((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
+    } else if (event.key === 'Enter' && activeSuggestion >= 0) {
+      event.preventDefault();
+      handleSuggestionSelect(suggestions[activeSuggestion]);
+    } else if (event.key === 'Escape') {
+      setShowSuggestions(false);
+      setActiveSuggestion(-1);
+    }
   };
 
   const handleVoiceSearch = () => {
@@ -152,10 +220,46 @@ export default function SearchResultsPage() {
                 <input
                   type="text"
                   value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => {
+                    if (suggestions.length > 0) setShowSuggestions(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setShowSuggestions(false), 120);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
                   placeholder="Search recipes, cuisines, ingredients..."
+                  autoComplete="off"
                   className="w-full pl-12 pr-14 py-3.5 border-2 border-gray-200 rounded-2xl text-base focus:outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100 transition-all text-gray-900 placeholder-gray-400"
                 />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
+                    {suggestions.map((suggestion, index) => (
+                      <button
+                        key={`${suggestion}-${index}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+                          activeSuggestion === index
+                            ? 'bg-orange-50 text-orange-700'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="material-icon !text-lg text-orange-400">search</span>
+                        <span className="line-clamp-1">{suggestion}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {suggestionsLoading && searchInput.trim().length >= 2 && (
+                  <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-orange-500">
+                    ...
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleVoiceSearch}

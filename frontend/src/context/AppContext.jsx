@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect } from 'react';
-import { authService } from '../utils/api';
+import { authService, videoCatalogService } from '../utils/api';
 
 const AppContext = createContext();
 
@@ -21,6 +21,7 @@ const initialState = {
   orderConfirmed: false,
   recentRecipes: JSON.parse(localStorage.getItem('recentRecipes') || '[]'),
   savedRecipes: JSON.parse(localStorage.getItem('savedRecipes') || '[]'),
+  favoriteRecipes: JSON.parse(localStorage.getItem('favoriteRecipes') || '[]'),
   loading: false,
   budgetMode: false,
   budgetLimit: null,
@@ -178,18 +179,56 @@ function appReducer(state, action) {
       return { ...state, recentRecipes: recent };
     }
 
+    case 'SET_RECENT_RECIPES':
+      localStorage.setItem('recentRecipes', JSON.stringify(action.payload || []));
+      return { ...state, recentRecipes: action.payload || [] };
+
+    case 'SET_SAVED_RECIPES':
+      localStorage.setItem('savedRecipes', JSON.stringify(action.payload || []));
+      return { ...state, savedRecipes: action.payload || [] };
+
+    case 'SET_FAVORITE_RECIPES':
+      localStorage.setItem('favoriteRecipes', JSON.stringify(action.payload || []));
+      return { ...state, favoriteRecipes: action.payload || [] };
+
     case 'SAVE_RECIPE': {
-      const already = state.savedRecipes.some(r => r.id === action.payload.id);
-      if (already) return state;
+      const already = state.savedRecipes.some(r => String(r.id) === String(action.payload.id));
+      if (already) {
+        const saved = state.savedRecipes.map(r =>
+          String(r.id) === String(action.payload.id) ? { ...r, ...action.payload } : r
+        );
+        localStorage.setItem('savedRecipes', JSON.stringify(saved));
+        return { ...state, savedRecipes: saved };
+      }
       const saved = [action.payload, ...state.savedRecipes];
       localStorage.setItem('savedRecipes', JSON.stringify(saved));
       return { ...state, savedRecipes: saved };
     }
 
     case 'REMOVE_SAVED_RECIPE': {
-      const saved = state.savedRecipes.filter(r => r.id !== action.payload);
+      const saved = state.savedRecipes.filter(r => String(r.id) !== String(action.payload));
       localStorage.setItem('savedRecipes', JSON.stringify(saved));
       return { ...state, savedRecipes: saved };
+    }
+
+    case 'ADD_FAVORITE_RECIPE': {
+      const already = state.favoriteRecipes.some(r => String(r.id) === String(action.payload.id));
+      if (already) {
+        const favorites = state.favoriteRecipes.map(r =>
+          String(r.id) === String(action.payload.id) ? { ...r, ...action.payload } : r
+        );
+        localStorage.setItem('favoriteRecipes', JSON.stringify(favorites));
+        return { ...state, favoriteRecipes: favorites };
+      }
+      const favorites = [action.payload, ...state.favoriteRecipes];
+      localStorage.setItem('favoriteRecipes', JSON.stringify(favorites));
+      return { ...state, favoriteRecipes: favorites };
+    }
+
+    case 'REMOVE_FAVORITE_RECIPE': {
+      const favorites = state.favoriteRecipes.filter(r => String(r.id) !== String(action.payload));
+      localStorage.setItem('favoriteRecipes', JSON.stringify(favorites));
+      return { ...state, favoriteRecipes: favorites };
     }
 
     case 'SET_BUDGET_MODE':
@@ -212,6 +251,33 @@ function appReducer(state, action) {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  const mapVideoActionToRecipe = (action) => ({
+    id: action.video?.youtubeVideoId || action.video?.id || action.id,
+    videoId: action.video?.youtubeVideoId,
+    dbVideoId: action.video?.id,
+    title: action.video?.title || 'Recipe video',
+    channelTitle: action.video?.channelName || 'Cook2Cart',
+    thumbnailUrl: action.video?.thumbnailUrl,
+    videoUrl: action.video?.videoUrl,
+    duration: action.video?.duration,
+    savedAt: action.createdAt,
+    watchedAt: action.createdAt,
+    ingredients: [],
+    instructions: [],
+  });
+
+  const hydrateVideoActions = async (userId) => {
+    const [history, saved, favorites] = await Promise.all([
+      videoCatalogService.getUserActions(userId, 'HISTORY'),
+      videoCatalogService.getUserActions(userId, 'SAVED'),
+      videoCatalogService.getUserActions(userId, 'FAVORITE'),
+    ]);
+
+    dispatch({ type: 'SET_RECENT_RECIPES', payload: history.data.map(mapVideoActionToRecipe) });
+    dispatch({ type: 'SET_SAVED_RECIPES', payload: saved.data.map(mapVideoActionToRecipe) });
+    dispatch({ type: 'SET_FAVORITE_RECIPES', payload: favorites.data.map(mapVideoActionToRecipe) });
+  };
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', state.theme);
   }, [state.theme]);
@@ -222,6 +288,11 @@ export function AppProvider({ children }) {
       authService.getProfile()
         .then((res) => {
           dispatch({ type: 'SET_USER', payload: res.data });
+          if (res.data?.id) {
+            hydrateVideoActions(res.data.id).catch((err) => {
+              console.error('Failed to load saved video actions:', err);
+            });
+          }
         })
         .catch(() => {
           localStorage.removeItem('token');

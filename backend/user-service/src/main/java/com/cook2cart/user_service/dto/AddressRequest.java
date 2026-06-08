@@ -14,4 +14,5 @@ public class AddressRequest {
     private String city;
     private String state;
     private String pincode;
+    private Boolean isDefault;
 }

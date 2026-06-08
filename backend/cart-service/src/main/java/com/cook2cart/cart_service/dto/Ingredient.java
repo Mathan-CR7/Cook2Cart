@@ -1,6 +1,7 @@
 package com.cook2cart.cart_service.dto;
 
 public class Ingredient {
+    private Long ingredientId;
     private String name;
     private Double recipeQuantity;
     private String recipeUnit;
@@ -79,6 +80,14 @@ public class Ingredient {
         this.variety = variety;
         this.recommendedPackSizes = recommendedPackSizes;
         this.products = new java.util.ArrayList<>();
+    }
+
+    public Long getIngredientId() {
+        return ingredientId;
+    }
+
+    public void setIngredientId(Long ingredientId) {
+        this.ingredientId = ingredientId;
     }
 
     public String getName() {

@@ -216,6 +216,7 @@ public class CartServiceImpl implements CartService {
                         .collect(Collectors.toList());
 
                 CartItem item = new CartItem(
+                        ing.getIngredientId(),
                         stdName,
                         originalNameLabel,
                         ing.getRecipeQuantity(),

@@ -2,8 +2,10 @@ package com.cook2cart.video_service.dto;
 
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
 public class YouTubeVideoDTO {
     private String videoId;
     private String title;

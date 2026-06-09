@@ -21,6 +21,9 @@ public class UserService {
                 .id(user.getId())
                 .name(user.getName())
                 .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .contact(user.getContact())
                 .build();
     }
 }

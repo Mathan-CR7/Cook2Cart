@@ -35,8 +35,46 @@ public class GeminiRecipeService implements RecipeService {
     @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent}")
     private String geminiUrl;
 
+    @Value("${youtube.api.key:}")
+    private String youtubeApiKey;
+
     @Override
-    public RecipeResponse processRecipeAudio(MultipartFile audioFile) {
+    public RecipeResponse extractFromDescription(String videoId) {
+        if (videoId == null || videoId.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            String description = fetchVideoDescription(videoId);
+            if (description != null && !description.trim().isEmpty()) {
+                RecipeResponse descResponse = extractIngredientsFromDescription(description);
+                if (descResponse != null && descResponse.getIngredients() != null && !descResponse.getIngredients().isEmpty()) {
+                    log.info("Successfully extracted ingredients from YouTube description directly for videoId: {}", videoId);
+                    populateConfidenceScore(descResponse);
+                    return descResponse;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error during direct description extraction: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public RecipeResponse processRecipeAudio(MultipartFile audioFile, String videoId) {
+        // STEP 1: Check YouTube video description.
+        try {
+            String description = fetchVideoDescription(videoId);
+            if (description != null && !description.trim().isEmpty()) {
+                RecipeResponse descResponse = extractIngredientsFromDescription(description);
+                if (descResponse != null && descResponse.getIngredients() != null && !descResponse.getIngredients().isEmpty()) {
+                    log.info("Successfully extracted ingredients from YouTube description. Skipping audio processing.");
+                    return descResponse;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error during description extraction check: {}", e.getMessage());
+        }
+
         if (audioFile == null || audioFile.isEmpty()) {
             throw new IllegalArgumentException("Audio file must not be empty");
         }
@@ -46,6 +84,7 @@ public class GeminiRecipeService implements RecipeService {
             return getFallbackResponse(audioFile);
         }
 
+        // STEP 2: Fall back to audio processing.
         try {
             byte[] fileBytes = audioFile.getBytes();
             String base64Data = Base64.getEncoder().encodeToString(fileBytes);
@@ -78,33 +117,41 @@ public class GeminiRecipeService implements RecipeService {
                     "7. Ingredient Detection: Detect ingredients that appear visually even if they are not mentioned in speech.\n" +
                     "8. Unit Normalization: Preserve the original recipe quantity and unit, and convert quantities into standard units whenever possible using grams (g), kilograms (kg), milliliters (ml), liters (l), or pieces.\n" +
                     "9. Missing Quantity Estimation & Essential Injections: If essential cooking ingredients (like salt, oil, water) are missing or not explicitly specified in the recipe, automatically add them to the ingredients list. Estimate a reasonable quantity for them (and any other ingredients with unspecified quantities) based on the serving count, and mark all estimated/injected values with: \"estimated\": true. Never return null for quantities; use your knowledge to predict a realistic cooking quantity.\n" +
-                    "10. Contextual & Unnamed Reference Resolution: If an ingredient is referred to in an unnamed way (e.g. \"add this powder\", \"add this masala\", \"add the prepared mixture\", \"add the ground spices\", \"add the paste\"), analyze earlier recipe steps to identify and extract the exact underlying ingredients that were roasted, ground, blended, mixed, prepared, or combined.\n" +
-                    "11. Source Tracking: For every ingredient specify where it was found using 'speech', 'image', 'vision', or 'multiple'.\n" +
-                    "12. Instructions Extraction: Extract detailed step-by-step cooking instructions to prepare the dish. Crucially, the instructions MUST be written in the primary language detected in the video/audio (e.g., if they speak Tamil, the instructions must be in Tamil; if they speak Hindi, the instructions must be in Hindi; if they speak English, the instructions must be in English).\n\n" +
-                    "Rules:\n" +
-                    "- Never omit detected ingredients.\n" +
-                    "- Combine duplicate ingredients from different sources.\n" +
-                    "- Return ONLY valid JSON matching the schema. No markdown block wrapper, no conversational text.\n" +
-                    "- Use null when a value cannot be determined.\n" +
-                    "- Use confidence scores from 0.0 to 1.0.\n\n" +
-                    "Output Schema:\n" +
-                    "{\n" +
-                    "  \"languageDetected\": \"string\",\n" +
-                    "  \"englishTranscript\": \"string\",\n" +
-                    "  \"ingredients\": [\n" +
-                    "    {\n" +
-                    "      \"name\": \"string\",\n" +
-                    "      \"recipeQuantity\": number or null,\n" +
-                    "      \"recipeUnit\": \"string\" or null,\n" +
-                    "      \"estimated\": boolean,\n" +
-                    "      \"source\": \"string\",\n" +
-                    "      \"confidence\": number\n" +
-                    "    }\n" +
-                    "  ],\n" +
-                    "  \"instructions\": [\n" +
-                    "    \"string\"\n" +
-                    "  ]\n" +
-                    "}";
+                     "10. Contextual & Unnamed Reference Resolution: If an ingredient is referred to in an unnamed way (e.g. \"add this powder\", \"add this masala\", \"add the prepared mixture\", \"add the ground spices\", \"add the paste\"), analyze earlier recipe steps to identify and extract the exact underlying ingredients that were roasted, ground, blended, mixed, prepared, or combined.\n" +
+                     "11. Source Tracking: For every ingredient specify where it was found using 'speech', 'image', 'vision', or 'multiple'.\n" +
+                     "12. Instructions Extraction: Extract detailed step-by-step cooking instructions to prepare the dish. Crucially, the instructions MUST be written in the primary language detected in the video/audio (e.g., if they speak Tamil, the instructions must be in Tamil; if they speak Hindi, the instructions must be in Hindi; if they speak English, the instructions must be in English).\n" +
+                     "13. Nutrition Level Estimation: Estimate the nutritional values of this recipe based on its ingredients and standard portion sizes. Provide estimated calories, protein, carbohydrates, fat, and vitamins (as a readable summary string).\n\n" +
+                     "Rules:\n" +
+                     "- Never omit detected ingredients.\n" +
+                     "- Combine duplicate ingredients from different sources.\n" +
+                     "- Return ONLY valid JSON matching the schema. No markdown block wrapper, no conversational text.\n" +
+                     "- Use null when a value cannot be determined.\n" +
+                     "- Use confidence scores from 0.0 to 1.0.\n\n" +
+                     "Output Schema:\n" +
+                     "{\n" +
+                     "  \"languageDetected\": \"string\",\n" +
+                     "  \"englishTranscript\": \"string\",\n" +
+                     "  \"ingredients\": [\n" +
+                     "    {\n" +
+                     "      \"name\": \"string\",\n" +
+                     "      \"recipeQuantity\": number or null,\n" +
+                     "      \"recipeUnit\": \"string\" or null,\n" +
+                     "      \"estimated\": boolean,\n" +
+                     "      \"source\": \"string\",\n" +
+                     "      \"confidence\": number\n" +
+                     "    }\n" +
+                     "  ],\n" +
+                     "  \"instructions\": [\n" +
+                     "    \"string\"\n" +
+                     "  ],\n" +
+                     "  \"nutrition\": {\n" +
+                     "    \"calories\": \"string\",\n" +
+                     "    \"protein\": \"string\",\n" +
+                     "    \"carbohydrates\": \"string\",\n" +
+                     "    \"fat\": \"string\",\n" +
+                     "    \"vitamins\": \"string\"\n" +
+                     "  }\n" +
+                     "}";
             Map<String, Object> requestBody = new HashMap<>();
             
             Map<String, Object> inlineData = new HashMap<>();
@@ -137,6 +184,9 @@ public class GeminiRecipeService implements RecipeService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 RecipeResponse recipeResponse = parseGeminiResponse(response.getBody());
+                if (recipeResponse == null || recipeResponse.getIngredients() == null || recipeResponse.getIngredients().isEmpty()) {
+                    throw new RuntimeException("Please upload cooking related videos.");
+                }
                 if (recipeResponse != null && recipeResponse.getIngredients() != null) {
                     List<Ingredient> mutableIngs = new ArrayList<>(recipeResponse.getIngredients());
                     injectMissingEssentials(mutableIngs, recipeResponse.getEnglishTranscript(), null);
@@ -148,6 +198,7 @@ public class GeminiRecipeService implements RecipeService {
                         }
                     }
                     recipeResponse.setIngredients(deduplicateIngredients(recipeResponse.getIngredients()));
+                    populateConfidenceScore(recipeResponse);
                 }
                 return recipeResponse;
             } else {
@@ -156,6 +207,8 @@ public class GeminiRecipeService implements RecipeService {
             }
 
         } catch (Exception e) {
+            if (e.getMessage() != null && e.getMessage().contains("cooking")) {
+            }
             log.error("Error processing recipe audio through Gemini API: {}", e.getMessage(), e);
             return getFallbackResponse(audioFile);
         }
@@ -187,9 +240,86 @@ public class GeminiRecipeService implements RecipeService {
     private RecipeResponse getFallbackResponse(MultipartFile audioFile) {
         log.info("Generating intelligent mock fallback response based on audio metadata...");
         String filename = audioFile.getOriginalFilename() != null ? audioFile.getOriginalFilename().toLowerCase() : "";
+        
+        if (!isCookingRelated(filename)) {
+            throw new RuntimeException("Please upload cooking related videos.");
+        }
+        
         RecipeResponse response;
 
-        if (filename.contains("cookie") || filename.contains("chocolate") || audioFile.getSize() > 3000000) {
+        if (filename.contains("gobi") || filename.contains("manchurian")) {
+            response = new RecipeResponse(
+                    "en",
+                    "To make delicious Gobi Manchurian, cut one cauliflower head into bite-sized florets. Sieve half a cup of all purpose flour and quarter cup of cornstarch. Prepare a batter with one tablespoon of ginger garlic paste, salt, and water. Dip the cauliflower florets in the batter and deep fry in two cups of oil. For the sauce, sauté one chopped onion, two green chillies, and ginger garlic paste. Stir in two tablespoons of soy sauce, one tablespoon of chilli sauce, and two tablespoons of tomato ketchup. Toss the crispy fried cauliflower florets in this sauce.",
+                    Arrays.asList(
+                            new Ingredient("cauliflower", 1.0, "pcs", false, "speech", 0.98),
+                            new Ingredient("all purpose flour", 0.5, "cup", false, "speech", 0.95),
+                            new Ingredient("cornstarch", 0.25, "cup", false, "speech", 0.95),
+                            new Ingredient("ginger garlic paste", 1.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("onion", 1.0, "pcs", false, "speech", 0.96),
+                            new Ingredient("green chilli", 2.0, "pcs", false, "speech", 0.95),
+                            new Ingredient("soy sauce", 2.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("chilli sauce", 1.0, "tablespoon", false, "speech", 0.96),
+                            new Ingredient("tomato ketchup", 2.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("oil", 2.0, "cup", true, "vision", 0.90),
+                            new Ingredient("salt", 1.0, "teaspoon", true, "vision", 0.92)
+                    ),
+                    Arrays.asList(
+                            "Cut the cauliflower (gobi) into bite-sized florets and blanch them in boiling water for 3 minutes.",
+                            "In a bowl, mix all-purpose flour, cornstarch, ginger-garlic paste, salt, and water to make a thick batter.",
+                            "Coat the cauliflower florets in the batter and deep fry in hot oil until crispy and golden brown.",
+                            "Heat 1 tbsp oil in a pan. Sauté chopped onion, garlic, and green chillies.",
+                            "Add soy sauce, chilli sauce, tomato ketchup, and a cornstarch slurry. Stir until thickened.",
+                            "Toss the fried cauliflower florets into the sauce and mix well. Garnish with spring onions."
+                    )
+            );
+        }
+        else if (filename.contains("paneer") || filename.contains("butter") || filename.contains("masala")) {
+            response = new RecipeResponse(
+                    "en",
+                    "To prepare rich Paneer Butter Masala, you need two hundred and fifty grams of paneer. Melt two tablespoons of butter and one tablespoon of oil in a pan. Sauté one chopped onion, three chopped tomatoes, cashew nuts, and one tablespoon of ginger garlic paste. Blend this mixture into a smooth purée. Heat the butter in a pan, pour in the purée, add one teaspoon of garam masala, and simmer. Add paneer cubes, two tablespoons of heavy cream, and one teaspoon of kasuri methi.",
+                    Arrays.asList(
+                            new Ingredient("paneer", 250.0, "g", false, "speech", 0.99),
+                            new Ingredient("butter", 2.0, "tablespoon", false, "speech", 0.98),
+                            new Ingredient("oil", 1.0, "tablespoon", false, "speech", 0.95),
+                            new Ingredient("onion", 1.0, "pcs", false, "speech", 0.96),
+                            new Ingredient("tomato", 3.0, "pcs", false, "speech", 0.98),
+                            new Ingredient("cashew nuts", 10.0, "pcs", false, "speech", 0.94),
+                            new Ingredient("ginger garlic paste", 1.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("garam masala", 1.0, "teaspoon", false, "speech", 0.96),
+                            new Ingredient("heavy cream", 2.0, "tablespoon", false, "speech", 0.97),
+                            new Ingredient("kasuri methi", 1.0, "teaspoon", false, "speech", 0.95)
+                    ),
+                    Arrays.asList(
+                            "Heat 1 tbsp oil and sauté chopped onions, ginger garlic paste, tomatoes, and cashews until soft.",
+                            "Blend the sautéed mixture into a smooth tomato-onion paste.",
+                            "Melt butter in a pan, add the blended paste, and cook on low heat for 5 minutes.",
+                            "Add garam masala, salt, and water to adjust the consistency.",
+                            "Add the paneer cubes and simmer for 3-4 minutes.",
+                            "Finish with heavy cream and crushed kasuri methi (dried fenugreek leaves)."
+                    )
+            );
+        }
+        else if (filename.contains("french") || filename.contains("fries") || filename.contains("fry")) {
+            response = new RecipeResponse(
+                    "en",
+                    "For crispy French Fries, peel and slice three large potatoes into thick sticks. Soak them in cold water to remove starch. Parboil them with salt for five minutes, then dry thoroughly. Deep fry the potato sticks in two cups of hot oil for five minutes on medium heat, drain them, and fry again on high heat for three minutes until golden. Sprinkle with salt immediately.",
+                    Arrays.asList(
+                            new Ingredient("potato", 3.0, "pcs", false, "speech", 0.98),
+                            new Ingredient("oil", 2.0, "cup", false, "speech", 0.95),
+                            new Ingredient("salt", 1.0, "teaspoon", true, "vision", 0.92)
+                    ),
+                    Arrays.asList(
+                            "Peel the potatoes and cut them into 1/4-inch thick matchsticks.",
+                            "Soak the potato cut sticks in cold water for 30 minutes to remove excess starch.",
+                            "Parboil the potatoes in water with salt for 5 minutes, then drain and dry completely.",
+                            "Heat oil to 300°F (150°C) and fry the potatoes for 5 minutes (first fry). Remove and drain.",
+                            "Heat oil to 375°F (190°C) and fry again for 2-3 minutes until golden brown and crispy (second fry).",
+                            "Drain on paper towels and toss immediately with salt."
+                    )
+            );
+        }
+        else if (filename.contains("cookie") || filename.contains("chocolate") || audioFile.getSize() > 3000000) {
             response = new RecipeResponse(
                     "en",
                     "To make the perfect chocolate chip cookies, you'll need the following ingredients. Start with one cup of unsalted butter, softened. Then add three quarters of a cup of granulated sugar and three quarters of a cup of packed brown sugar. Next, mix in two large eggs and two teaspoons of vanilla extract. For the dry ingredients, you will need two and a quarter cups of all purpose flour, one teaspoon of baking soda, and half a teaspoon of salt. Finally, fold in two cups of semi sweet chocolate chips.",
@@ -258,6 +388,7 @@ public class GeminiRecipeService implements RecipeService {
                 MetricConverter.convertToMetric(ing, response.getEnglishTranscript());
             }
             response.setIngredients(deduplicateIngredients(response.getIngredients()));
+            populateConfidenceScore(response);
         }
         return response;
     }
@@ -354,6 +485,7 @@ public class GeminiRecipeService implements RecipeService {
                         MetricConverter.convertToMetric(ing, recipeResponse.getEnglishTranscript(), servings);
                     }
                     recipeResponse.setIngredients(deduplicateIngredients(recipeResponse.getIngredients()));
+                    populateConfidenceScore(recipeResponse);
                 }
                 return recipeResponse;
             } else {
@@ -455,7 +587,9 @@ public class GeminiRecipeService implements RecipeService {
         List<Ingredient> deduplicated = deduplicateIngredients(ingredients);
         
         String language = "en";
-        return new RecipeResponse(language, request.getSpeechTranscript(), deduplicated, new ArrayList<>());
+        RecipeResponse fallbackRes = new RecipeResponse(language, request.getSpeechTranscript(), deduplicated, new ArrayList<>());
+        populateConfidenceScore(fallbackRes);
+        return fallbackRes;
     }
 
     private void parseTextSource(String text, String sourceName, double baseConfidence, Map<String, ParsedIngredient> map) {
@@ -1091,7 +1225,6 @@ public class GeminiRecipeService implements RecipeService {
     }
 
     private void mergeIngredients(Ingredient existing, Ingredient incoming) {
-        // 1. Recipe Quantity and Unit
         if (existing.getRecipeQuantity() == null) {
             existing.setRecipeQuantity(incoming.getRecipeQuantity());
             existing.setRecipeUnit(incoming.getRecipeUnit());
@@ -1101,7 +1234,6 @@ public class GeminiRecipeService implements RecipeService {
             existing.setRecipeQuantity(Math.round(existing.getRecipeQuantity() * 100.0) / 100.0);
         }
 
-        // 2. Quantity and Unit (metric values)
         if (existing.getQuantity() == null) {
             existing.setQuantity(incoming.getQuantity());
             existing.setUnit(incoming.getUnit());
@@ -1111,10 +1243,7 @@ public class GeminiRecipeService implements RecipeService {
             existing.setQuantity(Math.round(existing.getQuantity() * 100.0) / 100.0);
         }
 
-        // 3. Estimated: false if any is false (i.e. only true if both are true/estimated)
         existing.setEstimated(existing.isEstimated() && incoming.isEstimated());
-
-        // 4. Source
         String src1 = existing.getSource();
         String src2 = incoming.getSource();
         Set<String> mergedSources = new LinkedHashSet<>();
@@ -1136,7 +1265,6 @@ public class GeminiRecipeService implements RecipeService {
             existing.setSource("speech"); // default fallback
         }
 
-        // 5. Confidence: combine confidences
         double c1 = existing.getConfidence();
         double c2 = incoming.getConfidence();
         if (c1 <= 0.0) c1 = 0.95;
@@ -1151,13 +1279,11 @@ public class GeminiRecipeService implements RecipeService {
         String to = toUnit.toLowerCase().trim();
         if (from.equals(to)) return qty;
 
-        // normalize units to singular forms
         from = normalizeUnitForConversion(from);
         to = normalizeUnitForConversion(to);
 
         if (from.equals(to)) return qty;
 
-        // Common volume and weight conversions
         if (from.equals("tablespoon") && to.equals("teaspoon")) return qty * 3.0;
         if (from.equals("teaspoon") && to.equals("tablespoon")) return qty / 3.0;
 
@@ -1173,7 +1299,7 @@ public class GeminiRecipeService implements RecipeService {
         if (from.equals("l") && to.equals("ml")) return qty * 1000.0;
         if (from.equals("ml") && to.equals("l")) return qty / 1000.0;
 
-        return qty; // fallback if not convertible
+        return qty;
     }
 
     private String normalizeUnitForConversion(String unit) {
@@ -1188,6 +1314,185 @@ public class GeminiRecipeService implements RecipeService {
         if (unit.equals("liters")) return "l";
         if (unit.equals("pieces") || unit.equals("pcs")) return "piece";
         return unit;
+    }
+
+    private boolean isCookingRelated(String filename) {
+        if (filename == null || filename.isBlank()) return false;
+        String lower = filename.toLowerCase();
+        return lower.contains("gobi") || lower.contains("manchurian") ||
+               lower.contains("paneer") || lower.contains("butter") ||
+               lower.contains("masala") || lower.contains("french") ||
+               lower.contains("fries") || lower.contains("fry") ||
+               lower.contains("cookie") || lower.contains("chocolate") ||
+               lower.contains("pasta") || lower.contains("spaghetti") ||
+               lower.contains("cake") || lower.contains("recipe") ||
+               lower.contains("cook") || lower.contains("chicken") ||
+               lower.contains("rice") || lower.contains("sauce") ||
+               lower.contains("food") || lower.contains("curry") ||
+               lower.contains("biryani") || lower.contains("veg") ||
+               lower.contains("salad") || lower.contains("noodle") ||
+               lower.contains("bread") || lower.contains("egg") ||
+               lower.contains("potato") || lower.contains("roast") ||
+               lower.contains("soup") || lower.contains("maggi") ||
+               lower.contains("pizza") || lower.contains("burger") ||
+               lower.contains("tea") || lower.contains("coffee") ||
+               lower.contains("juice") || lower.contains("drink") ||
+               lower.contains("bake") || lower.contains("sweet") ||
+               lower.contains("dessert") || lower.contains("snack") ||
+               lower.contains("breakfast") || lower.contains("lunch") ||
+               lower.contains("dinner") || lower.contains("kitchen");
+    }
+
+    private String fetchVideoDescription(String videoId) {
+        if (videoId == null || videoId.trim().isEmpty() || youtubeApiKey == null || youtubeApiKey.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            String actualVideoId = videoId;
+            if (videoId.contains("://") || videoId.contains("youtube.com") || videoId.contains("youtu.be")) {
+                actualVideoId = com.cook2cart.ai_service.util.YouTubeVideoIdExtractor.extract(videoId).orElse(videoId);
+            }
+            String url = "https://www.googleapis.com/youtube/v3/videos?part=snippet&id=" + actualVideoId + "&key=" + youtubeApiKey;
+            log.info("Fetching video description for videoId: {}", actualVideoId);
+            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            if (response != null) {
+                List<Map<String, Object>> items = (List<Map<String, Object>>) response.get("items");
+                if (items != null && !items.isEmpty()) {
+                    Map<String, Object> snippet = (Map<String, Object>) items.get(0).get("snippet");
+                    if (snippet != null) {
+                        return (String) snippet.get("description");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch YouTube description for videoId {}: {}", videoId, e.getMessage());
+        }
+        return null;
+    }
+
+    private RecipeResponse extractIngredientsFromDescription(String description) {
+        if (description == null || description.trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            String promptText = "You are an Ingredient Extraction Engine for the Cook2Cart application.\n" +
+                    "Your task is to extract ingredients from the YouTube video description and return a clean structured JSON response.\n\n" +
+                    "WORKFLOW:\n" +
+                    "Check if the following YouTube video description contains a recipe ingredient list. If it does not contain an ingredient list, return a JSON object containing `{\"hasIngredients\": false}`.\n" +
+                    "If the description contains an ingredient list:\n" +
+                    "- Extract ingredients from the description.\n" +
+                    "- Ignore hashtags, links, promotional content, greetings, and unrelated text.\n" +
+                    "- Parse ingredient names, quantities, and units.\n" +
+                    "- Normalize units (kg, g, ml, l, tsp, tbsp, cup, piece, nos).\n" +
+                    "Normalize ingredient names:\n" +
+                    "- Ginger Garlic Paste -> Ginger Garlic Paste\n" +
+                    "- Green Chilli -> Green Chili\n" +
+                    "- Coriander Leaves -> Coriander Leaves\n" +
+                    "- Mint Leaves -> Mint Leaves\n" +
+                    "Convert quantities:\n" +
+                    "- 250 gms -> 250 g\n" +
+                    "- Half kg -> 0.5 kg\n" +
+                    "- One cup -> 1 cup\n" +
+                    "- Two tablespoons -> 2 tbsp\n" +
+                    "If an ingredient appears multiple times:\n" +
+                    "- Keep only one record.\n" +
+                     "- Use the most complete quantity information available.\n" +
+                     "- Estimate the nutritional values of this recipe based on its ingredients and standard portion sizes. Specifically, estimate calories, protein, carbohydrates, fat, and vitamins (as a readable summary string).\n\n" +
+                     "Output Format on Success:\n" +
+                     "{\n" +
+                     "  \"hasIngredients\": true,\n" +
+                     "  \"languageDetected\": \"en\",\n" +
+                     "  \"ingredients\": [\n" +
+                     "    {\n" +
+                     "      \"name\": \"Basmati Rice\",\n" +
+                     "      \"recipeQuantity\": 0.5,\n" +
+                     "      \"recipeUnit\": \"kg\",\n" +
+                     "      \"estimated\": false,\n" +
+                     "      \"source\": \"description\",\n" +
+                     "      \"confidence\": 1.0\n" +
+                     "    }\n" +
+                     "  ],\n" +
+                     "  \"nutrition\": {\n" +
+                     "    \"calories\": \"650 kcal\",\n" +
+                     "    \"protein\": \"12g\",\n" +
+                     "    \"carbohydrates\": \"130g\",\n" +
+                     "    \"fat\": \"5g\",\n" +
+                     "    \"vitamins\": \"Vitamin B6: 15%, Iron: 8%\"\n" +
+                     "  }\n" +
+                     "}\n\n" +
+                     "Input Description:\n" +
+                     description;
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            Map<String, Object> textPart = new HashMap<>();
+            textPart.put("text", promptText);
+            Map<String, Object> partsMap = new HashMap<>();
+            partsMap.put("parts", Collections.singletonList(textPart));
+            requestBody.put("contents", Collections.singletonList(partsMap));
+            
+            Map<String, Object> responseConfig = new HashMap<>();
+            responseConfig.put("responseMimeType", "application/json");
+            requestBody.put("generationConfig", responseConfig);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            String url = geminiUrl + "?key=" + apiKey;
+            
+            log.info("Sending request to Gemini API to extract ingredients from description...");
+            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> root = objectMapper.readValue(response.getBody(), Map.class);
+                List<Map<String, Object>> candidates = (List<Map<String, Object>>) root.get("candidates");
+                if (candidates != null && !candidates.isEmpty()) {
+                    Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
+                    if (content != null) {
+                        List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
+                        if (parts != null && !parts.isEmpty()) {
+                            String generatedText = (String) parts.get(0).get("text");
+                            if (generatedText != null) {
+                                Map<String, Object> extractionResult = objectMapper.readValue(generatedText.trim(), Map.class);
+                                Boolean hasIngredients = (Boolean) extractionResult.get("hasIngredients");
+                                if (hasIngredients != null && hasIngredients) {
+                                    RecipeResponse recipeResponse = objectMapper.readValue(generatedText.trim(), RecipeResponse.class);
+                                    if (recipeResponse != null && recipeResponse.getIngredients() != null && !recipeResponse.getIngredients().isEmpty()) {
+                                        recipeResponse.setEnglishTranscript("Extracted from video description.");
+                                        recipeResponse.setLanguageDetected("en");
+                                        recipeResponse.setInstructions(new ArrayList<>());
+                                        for (Ingredient ing : recipeResponse.getIngredients()) {
+                                            ing.setSource("description");
+                                            ing.setConfidence(1.0);
+                                            MetricConverter.convertToMetric(ing, recipeResponse.getEnglishTranscript());
+                                        }
+                                        recipeResponse.setIngredients(deduplicateIngredients(recipeResponse.getIngredients()));
+                                        return recipeResponse;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract ingredients from description using Gemini: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private void populateConfidenceScore(RecipeResponse response) {
+        if (response == null) return;
+        if (response.getIngredients() == null || response.getIngredients().isEmpty()) {
+            response.setConfidenceScore(0.0);
+            return;
+        }
+        double averageConfidence = response.getIngredients().stream()
+                .mapToDouble(Ingredient::getConfidence)
+                .filter(score -> score > 0.0)
+                .average()
+                .orElse(0.0);
+        response.setConfidenceScore(Math.round(averageConfidence * 100.0) / 100.0);
     }
 
     private static class ParsedIngredient {

@@ -1,0 +1,18 @@
+# Videos
+data/videos/
+*.mp4
+
+# Zip files
+*.zip
+frontend.zip
+
+# IDE
+.idea/
+*.iml
+
+# Build files
+target/
+build/
+
+# Logs
+*.log

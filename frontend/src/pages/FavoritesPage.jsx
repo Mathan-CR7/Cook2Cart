@@ -6,6 +6,8 @@ import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
 import DownloadButton from '../components/DownloadButton';
 import { recipeCatalogService, videoCatalogService } from '../utils/api';
+import { formatQty, formatUnit } from '../utils/quantityFormatter';
+import { getDisplayQuantityWithConversion } from '../utils/nutritionEstimator';
 
 export default function FavoritesPage() {
   const navigate = useNavigate();
@@ -235,7 +237,7 @@ export default function FavoritesPage() {
                             >
                               <span className="text-gray-800 text-sm font-medium truncate">{ing.name}</span>
                               <span className="text-orange-600 font-bold text-xs ml-2 flex-shrink-0">
-                                {ing.recipeQuantity || ing.quantity || ''} {ing.recipeUnit || ing.unit || 'pcs'}
+                                {getDisplayQuantityWithConversion(ing.name || '', formatQty(ing.recipeQuantity || ing.quantity || ''), formatUnit(ing.recipeUnit || ing.unit || 'pcs', ing.recipeQuantity || ing.quantity))}
                               </span>
                             </div>
                           ))}

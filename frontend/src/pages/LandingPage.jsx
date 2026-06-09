@@ -5,14 +5,14 @@ import AppBar from '../components/AppBar';
 import LogoIcon from '../components/LogoIcon';
 import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
-import { videoService } from '../utils/api';
+import { videoService, aiService } from '../utils/api';
 import { useApp } from '../context/AppContext';
 import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
 const QUICK_TRY_RECIPES = [
-  { label: 'Paneer Butter Masala', url: 'https://www.youtube.com/watch?v=hN711T0T55g' },
-  { label: 'Chocolate Lava Cake', url: 'https://www.youtube.com/watch?v=F3_d48N3Cts' },
-  { label: 'Crispy French Fries', url: 'https://www.youtube.com/watch?v=aG-80_B_gsw' },
+  { label: 'Paneer Butter Masala 🍛', url: 'https://www.youtube.com/watch?v=hN711T0T55g' },
+  { label: 'Chocolate Lava Cake 🧁', url: 'https://www.youtube.com/watch?v=F3_d48N3Cts' },
+  { label: 'Crispy French Fries 🍟', url: 'https://www.youtube.com/watch?v=aG-80_B_gsw' },
 ];
 
 const MOCK_TRANSCRIPTS = [
@@ -38,7 +38,6 @@ export default function LandingPage() {
   const { state } = useApp();
   const [url, setUrl] = useState('');
   const [processing, setProcessing] = useState(false);
-  const [downloadedVideo, setDownloadedVideo] = useState(null);
   const [error, setError] = useState('');
 
   // Live simulation loop states
@@ -83,7 +82,6 @@ export default function LandingPage() {
     }
 
     setProcessing(true);
-    setDownloadedVideo(null);
 
     // Fetch video title from oEmbed API
     let videoTitle = 'My Recipe';
@@ -99,41 +97,25 @@ export default function LandingPage() {
       console.warn('Could not fetch video title, using default:', titleErr);
     }
 
-    try {
-      await videoService.process(url);
-      setDownloadedVideo({
-        videoId,
-        title: videoTitle,
-        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-        url,
+    setProcessing(false);
+
+    if (!state.isAuthenticated) {
+      navigate(`/login?redirect=/process/${videoId}`);
+    } else {
+      navigate(`/process/${videoId}`, {
+        state: {
+          videoId,
+          title: videoTitle,
+          thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          url,
+        },
       });
-    } catch (err) {
-      setError('Failed to process video. Make sure the backend is running.');
-    } finally {
-      setProcessing(false);
     }
   };
 
   const handleQuickTry = (recipeUrl) => {
     setUrl(recipeUrl);
     setError('');
-    setDownloadedVideo(null);
-  };
-
-  const handleExtract = () => {
-    if (!downloadedVideo) return;
-    if (!state.isAuthenticated) {
-      navigate(`/login?redirect=/process/${downloadedVideo.videoId}`);
-    } else {
-      navigate(`/process/${downloadedVideo.videoId}`, {
-        state: {
-          videoId: downloadedVideo.videoId,
-          title: downloadedVideo.title || 'YouTube Recipe',
-          channelTitle: 'YouTube',
-          thumbnailUrl: downloadedVideo.thumbnailUrl,
-        },
-      });
-    }
   };
 
   return (
@@ -251,7 +233,7 @@ export default function LandingPage() {
                   <input
                     type="url"
                     value={url}
-                    onChange={(e) => { setUrl(e.target.value); setError(''); setDownloadedVideo(null); }}
+                    onChange={(e) => { setUrl(e.target.value); setError(''); }}
                     className="w-full bg-transparent pl-12 pr-4 py-3.5 rounded-xl text-base text-[#1e2229] placeholder-gray-400 focus:outline-none"
                     placeholder="Paste YouTube recipe URL here..."
                     disabled={processing}
@@ -321,41 +303,8 @@ export default function LandingPage() {
               )}
             </AnimatePresence>
 
-            {/* Video preview card */}
-            <AnimatePresence>
-              {downloadedVideo && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 15 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                  className="mt-6 glass gradient-border-brand p-5 rounded-2xl flex flex-col sm:flex-row items-center gap-4 text-left shadow-lg"
-                >
-                  <img
-                    src={downloadedVideo.thumbnailUrl}
-                    alt="Video thumbnail"
-                    className="w-32 h-20 rounded-xl object-cover border border-white/20"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
-                      <span className="text-[#10b981] text-xs font-black uppercase tracking-wider font-display">Ready for extraction</span>
-                    </div>
-                    <h4 className="text-[#1e2229] font-extrabold text-sm truncate">{downloadedVideo.title}</h4>
-                    <p className="text-gray-400 text-xs truncate mt-0.5">{downloadedVideo.url}</p>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={handleExtract}
-                    className="w-full sm:w-auto gradient-bg text-white px-6 py-3 rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(255,107,53,0.25)] flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span className="material-icon text-base fill !text-white">auto_awesome</span>
-                    <span>Extract Ingredients</span>
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Video preview card placeholder */}
+            <AnimatePresence></AnimatePresence>
           </motion.div>
 
           {/* Side-by-Side YouTube Video & Cart Showcase (Only visible on mobile/tablet < lg) */}
@@ -801,4 +750,3 @@ export default function LandingPage() {
     </div>
   );
 }
-

@@ -100,7 +100,7 @@ export default function AppBar() {
                       to="/profile"
                       className="flex items-center gap-2.5 transition-all"
                     >
-                      <div className="w-7 h-7 rounded-lg gradient-bg flex items-center justify-center text-white text-xs font-bold font-display shadow-[0_2px_8px_rgba(255,107,53,0.2)]">
+                      <div className="w-7 h-7 rounded-full bg-black flex items-center justify-center text-white text-xs font-bold font-display shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                         {state.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </div>
                       <span className="text-sm font-semibold text-[#5a6270] hover:text-[#ff6b35] transition-colors truncate">{state.user?.name}</span>
@@ -133,7 +133,7 @@ export default function AppBar() {
               {state.isAuthenticated && (
                 <Link
                   to="/profile"
-                  className="w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white text-sm font-bold font-display"
+                  className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white text-sm font-bold font-display shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
                 >
                   {state.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </Link>

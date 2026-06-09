@@ -64,14 +64,15 @@ public class VideoAudioReadyConsumer {
         }
 
         Path audioPath = resolveAudioPath(event.getAudioPath());
-        if (!Files.exists(audioPath)) {
-            log.error("Audio file not found for AUDIO_READY event. audioPath={}, event={}", audioPath, event);
-            return;
+        org.springframework.web.multipart.MultipartFile audioFile = null;
+        if (Files.exists(audioPath)) {
+            audioFile = new PathMultipartFile(audioPath, "audio/mpeg");
+        } else {
+            log.warn("Audio file not found for AUDIO_READY event. Will try to extract ingredients from YouTube description. audioPath={}", audioPath);
         }
 
         try {
-            PathMultipartFile audioFile = new PathMultipartFile(audioPath, "audio/mpeg");
-            RecipeResponse response = recipeService.processRecipeAudio(audioFile);
+            RecipeResponse response = recipeService.processRecipeAudio(audioFile, cacheVideoId);
 
             if (response == null) {
                 log.warn("AI processing returned null for event: {}", event);

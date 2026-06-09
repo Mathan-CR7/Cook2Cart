@@ -39,7 +39,7 @@ class AiServiceApplicationTests {
                 "mock-audio-data-greater-than-3mb-so-we-can-trigger-the-cookie-fallback".repeat(50000).getBytes()
         );
 
-        RecipeResponse response = recipeService.processRecipeAudio(audioFile);
+        RecipeResponse response = recipeService.processRecipeAudio(audioFile, "chocolate_chip_cookies");
         assertNotNull(response);
         assertEquals("en", response.getLanguageDetected());
         assertTrue(response.getEnglishTranscript().contains("chocolate chip cookies"));
@@ -77,7 +77,7 @@ class AiServiceApplicationTests {
                 "mock-audio-data".getBytes()
         );
 
-        RecipeResponse response = recipeService.processRecipeAudio(audioFile);
+        RecipeResponse response = recipeService.processRecipeAudio(audioFile, "simple_pasta_recipe");
         assertNotNull(response);
         assertEquals("en", response.getLanguageDetected());
         assertTrue(response.getEnglishTranscript().contains("simple pasta"));
@@ -214,7 +214,7 @@ class AiServiceApplicationTests {
 
         // Verify green chilli is translated and merged
         com.cook2cart.ai_service.dto.Ingredient greenChilli = ingredients.stream()
-                .filter(i -> "green chilli".equals(i.getName()))
+                .filter(i -> "green chili".equals(i.getName()))
                 .findFirst().orElse(null);
         assertNotNull(greenChilli);
         assertEquals("speech+vision", greenChilli.getSource());

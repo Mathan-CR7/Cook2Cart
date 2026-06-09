@@ -1,3 +1,5 @@
+import { formatQty, formatUnit } from './quantityFormatter';
+
 /**
  * Downloads recipe data as a plain-text (.txt) file.
  */
@@ -14,8 +16,10 @@ export function downloadAsTxt(recipe) {
   lines.push('──────────────────────────────────────────');
   if (ingredients.length > 0) {
     ingredients.forEach((ing, i) => {
-      const qty   = ing.recipeQuantity ?? ing.quantity ?? '';
-      const unit  = ing.recipeUnit    ?? ing.unit      ?? 'pcs';
+      const rawQty = ing.recipeQuantity ?? ing.quantity ?? '';
+      const rawUnit = ing.recipeUnit    ?? ing.unit      ?? 'pcs';
+      const qty = formatQty(rawQty);
+      const unit = formatUnit(rawUnit, qty);
       const name  = ing.name || '';
       lines.push(`  ${i + 1}. ${name.padEnd(22)} ${qty} ${unit}`);
     });
@@ -59,8 +63,10 @@ export function downloadAsPdf(recipe) {
 
   const ingredientRows = ingredients.length > 0
     ? ingredients.map((ing, i) => {
-        const qty  = ing.recipeQuantity ?? ing.quantity ?? '';
-        const unit = ing.recipeUnit    ?? ing.unit      ?? 'pcs';
+        const rawQty = ing.recipeQuantity ?? ing.quantity ?? '';
+        const rawUnit = ing.recipeUnit    ?? ing.unit      ?? 'pcs';
+        const qty = formatQty(rawQty);
+        const unit = formatUnit(rawUnit, qty);
         const name = ing.name || '';
         return `
           <tr style="border-bottom:1px solid #f3f4f6;">

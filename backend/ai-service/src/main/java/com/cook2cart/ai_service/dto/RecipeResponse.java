@@ -3,6 +3,9 @@ package com.cook2cart.ai_service.dto;
 import java.util.List;
 import java.util.Objects;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class RecipeResponse {
 
     private Long id;
@@ -17,7 +20,17 @@ public class RecipeResponse {
 
     private List<String> instructions;
 
+    private Nutrition nutrition;
+
     public RecipeResponse() {
+    }
+
+    public Nutrition getNutrition() {
+        return nutrition;
+    }
+
+    public void setNutrition(Nutrition nutrition) {
+        this.nutrition = nutrition;
     }
 
     public RecipeResponse(String languageDetected, String englishTranscript, List<Ingredient> ingredients, List<String> instructions) {

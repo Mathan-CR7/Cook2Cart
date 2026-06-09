@@ -20,6 +20,8 @@ public class CartItem {
     private double price;
     private boolean availableAtHome;
     private List<String> recommendedBrands;
+    private String recipeName;
+
 
     public CartItem() {
     }
@@ -179,4 +181,13 @@ public class CartItem {
     public void setRecommendedBrands(List<String> recommendedBrands) {
         this.recommendedBrands = recommendedBrands;
     }
+
+    public String getRecipeName() {
+        return recipeName;
+    }
+
+    public void setRecipeName(String recipeName) {
+        this.recipeName = recipeName;
+    }
 }
+

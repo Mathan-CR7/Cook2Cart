@@ -6,6 +6,7 @@ import java.util.List;
 
 public interface CartService {
     Cart initializeCart(List<Ingredient> ingredients, int servings);
+    Cart initializeCart(List<Ingredient> ingredients, int servings, String recipeName);
     Cart scaleCart(Cart cart, int targetServings);
     Cart updateCartItem(Cart cart, int index, String productId, String brand, String size, Boolean availableAtHome);
     Cart updateLatestPrices(Cart cart);

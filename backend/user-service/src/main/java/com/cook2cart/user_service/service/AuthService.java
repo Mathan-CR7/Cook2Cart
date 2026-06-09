@@ -27,7 +27,10 @@ public class AuthService {
         }
 
         User user = User.builder()
-                .name(request.getName())
+                .name(request.getFirstName() + " " + request.getLastName())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .contact(request.getContact())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .authProvider("LOCAL")

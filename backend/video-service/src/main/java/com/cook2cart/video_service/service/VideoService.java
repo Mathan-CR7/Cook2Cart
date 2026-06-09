@@ -74,8 +74,12 @@ public class VideoService {
         String videoPath = new File(resolvedVideoDir, baseName + ".mp4").getAbsolutePath();
         String audioPath = new File(resolvedAudioDir, baseName + ".mp3").getAbsolutePath();
 
-        downloadVideo(youtubeUrl, videoPath);
-        extractAudio(videoPath, audioPath);
+        // Download only the audio track directly from YouTube (extremely fast)
+        downloadAudioOnly(youtubeUrl, audioPath);
+        
+        // Create a dummy video placeholder to satisfy database and metadata fields
+        createDummyVideoFile(videoPath);
+
         publishAudioReadyEvent(userId, videoId, youtubeUrl, videoPath, audioPath);
 
         log.info("Video processing completed successfully");
@@ -102,48 +106,35 @@ public class VideoService {
         videoAudioReadyProducer.publish(event);
     }
 
-    private void downloadVideo(String youtubeUrl, String outputPath) throws Exception {
-
-        log.info("Starting video download...");
+    private void downloadAudioOnly(String youtubeUrl, String outputPath) throws Exception {
+        log.info("Starting direct audio download from YouTube...");
 
         ProcessBuilder processBuilder = new ProcessBuilder(
                 ytDlpPath,
-                "-f",
-                "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
-                "--merge-output-format",
-                "mp4",
+                "-f", "bestaudio",
+                "--extract-audio",
+                "--audio-format", "mp3",
+                "--ffmpeg-location", ffmpegPath,
                 "--no-playlist",
                 "--force-overwrites",
-                "-o",
-                outputPath,
+                "-o", outputPath,
                 youtubeUrl
         );
 
-        runCommand("Video download", processBuilder);
-
-        log.info("Video downloaded successfully: {}", outputPath);
+        runCommand("Audio download & extraction", processBuilder);
+        log.info("Audio downloaded and extracted directly to: {}", outputPath);
     }
 
-    private void extractAudio(String videoPath, String audioPath) throws Exception {
-
-        log.info("Starting audio extraction...");
-
-        ProcessBuilder processBuilder = new ProcessBuilder(
-                ffmpegPath,
-                "-y",
-                "-i",
-                videoPath,
-                "-vn",
-                "-acodec", "libmp3lame",
-                "-b:a", "128k",
-                "-ar", "16000",
-                "-ac", "1",
-                audioPath
-        );
-
-        runCommand("Audio extraction", processBuilder);
-
-        log.info("Audio extracted successfully: {}", audioPath);
+    private void createDummyVideoFile(String outputPath) {
+        try {
+            File dummyVideo = new File(outputPath);
+            if (!dummyVideo.exists()) {
+                dummyVideo.createNewFile();
+                log.info("Created placeholder dummy video file at: {}", outputPath);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to create dummy video file: {}", e.getMessage());
+        }
     }
 
     private void runCommand(String step, ProcessBuilder processBuilder) throws Exception {

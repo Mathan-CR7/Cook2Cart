@@ -21,6 +21,10 @@ const FALLBACK_SEARCH_SUGGESTIONS = [
   'dosa',
   'pasta',
   'healthy breakfast',
+  'egg recipe',
+  'egg biryani',
+  'egg curry',
+  'egg masala',
 ];
 
 const getFallbackSuggestions = (prefix) => {

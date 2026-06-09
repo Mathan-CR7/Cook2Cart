@@ -1,9 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
+import PremiumBackground from '../components/PremiumBackground';
 import RecipeCard from '../components/RecipeCard';
 import { getApiErrorMessage, videoService } from '../utils/api';
+
+const FALLBACK_SEARCH_SUGGESTIONS = [
+  'mutton biryani',
+  'mutton curry',
+  'mutton gravy',
+  'mutton sukka',
+  'mutton chops',
+  'mutton keema',
+  'mutton soup',
+  'chicken biryani',
+  'chicken curry',
+  'paneer butter masala',
+  'dosa',
+  'pasta',
+  'healthy breakfast',
+];
+
+const getFallbackSuggestions = (prefix) => {
+  const normalizedPrefix = prefix.trim().toLowerCase();
+  if (normalizedPrefix.length < 2) return [];
+
+  return FALLBACK_SEARCH_SUGGESTIONS
+    .filter((suggestion) => suggestion.includes(normalizedPrefix))
+    .slice(0, 6);
+};
 
 export default function SearchResultsPage() {
   const navigate = useNavigate();
@@ -70,7 +97,9 @@ export default function SearchResultsPage() {
       videoService.suggestions(prefix)
         .then((res) => {
           if (cancelled) return;
-          const nextSuggestions = Array.isArray(res.data) ? res.data : [];
+          const apiSuggestions = Array.isArray(res.data) ? res.data : [];
+          const fallbackSuggestions = getFallbackSuggestions(prefix);
+          const nextSuggestions = [...new Set([...apiSuggestions, ...fallbackSuggestions])].slice(0, 8);
           setSuggestions(nextSuggestions);
           setShowSuggestions(nextSuggestions.length > 0);
           setActiveSuggestion(-1);
@@ -78,8 +107,9 @@ export default function SearchResultsPage() {
         .catch((err) => {
           if (cancelled) return;
           console.error('Failed to load search suggestions:', err);
-          setSuggestions([]);
-          setShowSuggestions(false);
+          const fallbackSuggestions = getFallbackSuggestions(prefix);
+          setSuggestions(fallbackSuggestions);
+          setShowSuggestions(fallbackSuggestions.length > 0);
         })
         .finally(() => {
           if (!cancelled) setSuggestionsLoading(false);
@@ -176,38 +206,52 @@ export default function SearchResultsPage() {
   };
 
   return (
-    <div className="bg-white min-h-screen pb-16">
+    <div className="c2c-root min-h-screen pb-16 overflow-x-hidden relative bg-[white]">
+      <PremiumBackground />
       <AppBar />
-      {isListening && (
-        <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-center justify-center px-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center border border-gray-100">
-            <button
-              type="button"
-              onClick={stopVoiceSearch}
-              className="ml-auto mb-4 w-9 h-9 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center transition-colors"
-              aria-label="Close voice search"
+      <AnimatePresence>
+        {isListening && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.92, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 15 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center border border-gray-100 relative"
             >
-              <span className="material-icon !text-xl">close</span>
-            </button>
-            <div className="relative w-28 h-28 mx-auto mb-6 flex items-center justify-center">
-              <span className="absolute inset-0 rounded-full bg-red-100 animate-ping" />
-              <span className="absolute inset-4 rounded-full bg-red-200 animate-pulse" />
-              <div className="relative w-20 h-20 rounded-full bg-red-500 text-white flex items-center justify-center shadow-xl">
-                <span className="material-icon fill !text-white !text-4xl">mic</span>
+              <button
+                type="button"
+                onClick={stopVoiceSearch}
+                className="ml-auto mb-4 w-9 h-9 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close voice search"
+              >
+                <span className="material-icon !text-xl">close</span>
+              </button>
+              <div className="relative w-28 h-28 mx-auto mb-6 flex items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-red-100 animate-ping" />
+                <span className="absolute inset-4 rounded-full bg-red-200 animate-pulse" />
+                <div className="relative w-20 h-20 rounded-full bg-red-500 text-white flex items-center justify-center shadow-xl">
+                  <span className="material-icon fill !text-white !text-4xl">mic</span>
+                </div>
               </div>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Listening...</h2>
-            <p className="text-gray-500 text-sm mb-6">Speak your recipe search</p>
-            <div className="flex items-center justify-center gap-1.5 h-8">
-              <span className="w-1.5 h-3 rounded-full bg-orange-400 animate-pulse" />
-              <span className="w-1.5 h-6 rounded-full bg-red-400 animate-pulse [animation-delay:120ms]" />
-              <span className="w-1.5 h-4 rounded-full bg-orange-400 animate-pulse [animation-delay:240ms]" />
-              <span className="w-1.5 h-7 rounded-full bg-red-400 animate-pulse [animation-delay:360ms]" />
-              <span className="w-1.5 h-3 rounded-full bg-orange-400 animate-pulse [animation-delay:480ms]" />
-            </div>
-          </div>
-        </div>
-      )}
+              <h2 className="text-2xl font-bold text-gray-900 mb-2 font-display">Listening...</h2>
+              <p className="text-gray-500 text-sm mb-6">Speak your recipe search</p>
+              <div className="flex items-center justify-center gap-1.5 h-8">
+                <span className="w-1.5 h-3 rounded-full bg-orange-400 animate-pulse" />
+                <span className="w-1.5 h-6 rounded-full bg-red-400 animate-pulse [animation-delay:120ms]" />
+                <span className="w-1.5 h-4 rounded-full bg-orange-400 animate-pulse [animation-delay:240ms]" />
+                <span className="w-1.5 h-7 rounded-full bg-red-400 animate-pulse [animation-delay:360ms]" />
+                <span className="w-1.5 h-3 rounded-full bg-orange-400 animate-pulse [animation-delay:480ms]" />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
         {/* Search Input */}
         <div className="mb-8">
@@ -282,21 +326,6 @@ export default function SearchResultsPage() {
             </div>
           </form>
 
-          {/* Filter Chips */}
-          <div className="flex gap-2 overflow-x-auto py-4 no-scrollbar">
-            {['All Results', 'Under 20 mins', 'Vegetarian', 'Gluten-Free', 'High Protein'].map((chip) => (
-              <button
-                key={chip}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all ${
-                  chip === 'All Results'
-                    ? 'bg-orange-500 text-white border-orange-500'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300 hover:text-orange-600'
-                }`}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
 
           <p className="text-gray-500 text-sm">
             {isListening && 'Listening... speak your recipe search'}

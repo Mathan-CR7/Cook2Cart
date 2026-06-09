@@ -1,0 +1,381 @@
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import AppBar from '../components/AppBar';
+import BottomNav from '../components/BottomNav';
+import PremiumBackground from '../components/PremiumBackground';
+import RecipeCard from '../components/RecipeCard';
+import { getApiErrorMessage, videoService } from '../utils/api';
+
+const FALLBACK_SEARCH_SUGGESTIONS = [
+  'mutton biryani',
+  'mutton curry',
+  'mutton gravy',
+  'mutton sukka',
+  'mutton chops',
+  'mutton keema',
+  'mutton soup',
+  'chicken biryani',
+  'chicken curry',
+  'paneer butter masala',
+  'dosa',
+  'pasta',
+  'healthy breakfast',
+];
+
+const getFallbackSuggestions = (prefix) => {
+  const normalizedPrefix = prefix.trim().toLowerCase();
+  if (normalizedPrefix.length < 2) return [];
+
+  return FALLBACK_SEARCH_SUGGESTIONS
+    .filter((suggestion) => suggestion.includes(normalizedPrefix))
+    .slice(0, 6);
+};
+
+export default function SearchResultsPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const query = searchParams.get('q') || '';
+  const [searchInput, setSearchInput] = useState(query);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    setSearchInput(query);
+
+    if (!query.trim()) {
+      setResults([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+
+    videoService.search(query)
+      .then((res) => {
+        if (cancelled) return;
+        setResults(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setResults([]);
+        setError(getApiErrorMessage(err, 'Failed to fetch videos. Make sure video-service is running.'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [query]);
+
+  useEffect(() => {
+    const prefix = searchInput.trim();
+
+    if (prefix.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setActiveSuggestion(-1);
+      return;
+    }
+
+    let cancelled = false;
+    setSuggestionsLoading(true);
+    const timeoutId = setTimeout(() => {
+      videoService.suggestions(prefix)
+        .then((res) => {
+          if (cancelled) return;
+          const apiSuggestions = Array.isArray(res.data) ? res.data : [];
+          const fallbackSuggestions = getFallbackSuggestions(prefix);
+          const nextSuggestions = [...new Set([...apiSuggestions, ...fallbackSuggestions])].slice(0, 8);
+          setSuggestions(nextSuggestions);
+          setShowSuggestions(nextSuggestions.length > 0);
+          setActiveSuggestion(-1);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error('Failed to load search suggestions:', err);
+          const fallbackSuggestions = getFallbackSuggestions(prefix);
+          setSuggestions(fallbackSuggestions);
+          setShowSuggestions(fallbackSuggestions.length > 0);
+        })
+        .finally(() => {
+          if (!cancelled) setSuggestionsLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [searchInput]);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    const nextQuery = searchInput.trim();
+    if (!nextQuery) return;
+    setShowSuggestions(false);
+    navigate(`/search?q=${encodeURIComponent(nextQuery)}`);
+  };
+
+  const handleSuggestionSelect = (suggestion) => {
+    setSearchInput(suggestion);
+    setShowSuggestions(false);
+    setActiveSuggestion(-1);
+    navigate(`/search?q=${encodeURIComponent(suggestion)}`);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveSuggestion((current) => (current + 1) % suggestions.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSuggestion((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
+    } else if (event.key === 'Enter' && activeSuggestion >= 0) {
+      event.preventDefault();
+      handleSuggestionSelect(suggestions[activeSuggestion]);
+    } else if (event.key === 'Escape') {
+      setShowSuggestions(false);
+      setActiveSuggestion(-1);
+    }
+  };
+
+  const handleVoiceSearch = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setVoiceSupported(false);
+      setError('Voice search is not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = 'en-IN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setError('');
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      if (!transcript) return;
+
+      setSearchInput(transcript);
+      navigate(`/search?q=${encodeURIComponent(transcript)}`);
+    };
+
+    recognition.onerror = (event) => {
+      const message = event.error === 'not-allowed'
+        ? 'Microphone permission was blocked. Allow microphone access and try again.'
+        : 'Could not hear that clearly. Try speaking again.';
+
+      setError(message);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.start();
+  };
+
+  const stopVoiceSearch = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsListening(false);
+  };
+
+  return (
+    <div className="c2c-root min-h-screen pb-16 overflow-x-hidden relative bg-[white]">
+      <PremiumBackground />
+      <AppBar />
+      <AnimatePresence>
+        {isListening && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.92, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 15 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center border border-gray-100 relative"
+            >
+              <button
+                type="button"
+                onClick={stopVoiceSearch}
+                className="ml-auto mb-4 w-9 h-9 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close voice search"
+              >
+                <span className="material-icon !text-xl">close</span>
+              </button>
+              <div className="relative w-28 h-28 mx-auto mb-6 flex items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-red-100 animate-ping" />
+                <span className="absolute inset-4 rounded-full bg-red-200 animate-pulse" />
+                <div className="relative w-20 h-20 rounded-full bg-red-500 text-white flex items-center justify-center shadow-xl">
+                  <span className="material-icon fill !text-white !text-4xl">mic</span>
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2 font-display">Listening...</h2>
+              <p className="text-gray-500 text-sm mb-6">Speak your recipe search</p>
+              <div className="flex items-center justify-center gap-1.5 h-8">
+                <span className="w-1.5 h-3 rounded-full bg-orange-400 animate-pulse" />
+                <span className="w-1.5 h-6 rounded-full bg-red-400 animate-pulse [animation-delay:120ms]" />
+                <span className="w-1.5 h-4 rounded-full bg-orange-400 animate-pulse [animation-delay:240ms]" />
+                <span className="w-1.5 h-7 rounded-full bg-red-400 animate-pulse [animation-delay:360ms]" />
+                <span className="w-1.5 h-3 rounded-full bg-orange-400 animate-pulse [animation-delay:480ms]" />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
+        {/* Search Input */}
+        <div className="mb-8">
+          <form onSubmit={handleSearch} className="bg-white rounded-3xl shadow-lg p-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 relative">
+                <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => {
+                    if (suggestions.length > 0) setShowSuggestions(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setShowSuggestions(false), 120);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search recipes, cuisines, ingredients..."
+                  autoComplete="off"
+                  className="w-full pl-12 pr-14 py-3.5 border-2 border-gray-200 rounded-2xl text-base focus:outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100 transition-all text-gray-900 placeholder-gray-400"
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-40 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
+                    {suggestions.map((suggestion, index) => (
+                      <button
+                        key={`${suggestion}-${index}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        className={`w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${
+                          activeSuggestion === index
+                            ? 'bg-orange-50 text-orange-700'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="material-icon !text-lg text-orange-400">search</span>
+                        <span className="line-clamp-1">{suggestion}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {suggestionsLoading && searchInput.trim().length >= 2 && (
+                  <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-orange-500">
+                    ...
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleVoiceSearch}
+                  disabled={isListening || !voiceSupported}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                    isListening
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'bg-orange-50 text-orange-600 hover:bg-orange-100'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  aria-label={isListening ? 'Listening' : 'Voice search'}
+                  title={isListening ? 'Listening...' : 'Voice search'}
+                >
+                  <span className={`material-icon !text-xl ${isListening ? '!text-white fill' : ''}`}>mic</span>
+                </button>
+              </div>
+              <button type="submit" disabled={loading} className="gradient-bg text-white px-6 py-3.5 rounded-2xl font-semibold hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <span className="material-icon !text-white !text-lg fill">auto_awesome</span>
+                {loading ? 'Searching...' : 'Magic Search'}
+              </button>
+            </div>
+          </form>
+
+
+          <p className="text-gray-500 text-sm">
+            {isListening && 'Listening... speak your recipe search'}
+            {!isListening && !query && 'Search YouTube recipe videos'}
+            {!isListening && query && (loading ? 'Searching...' : `${results.length} videos found`)}
+            {query && <> for &ldquo;{query}&rdquo;</>}
+          </p>
+        </div>
+
+        {/* Results Grid */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm">
+            {error}
+          </div>
+        )}
+
+        {!query && !loading ? (
+          <div className="text-center py-20 border border-dashed border-gray-200 rounded-3xl">
+            <span className="material-icon !text-5xl text-orange-400 mb-3">youtube_searched_for</span>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Search for a recipe video</h2>
+            <p className="text-gray-500 text-sm">Try pasta, biryani, dosa, chicken curry, or healthy breakfast.</p>
+          </div>
+        ) : loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-lg animate-pulse">
+                <div className="aspect-video bg-gray-200" />
+                <div className="p-5 space-y-3">
+                  <div className="h-5 bg-gray-200 rounded w-3/4" />
+                  <div className="h-4 bg-gray-200 rounded w-1/2" />
+                  <div className="h-10 bg-gray-200 rounded w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : results.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+            {results.map((recipe, i) => (
+              <RecipeCard key={recipe.videoId} recipe={recipe} index={i} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-20 border border-dashed border-gray-200 rounded-3xl">
+            <span className="material-icon !text-5xl text-gray-300 mb-3">search_off</span>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">No videos found</h2>
+            <p className="text-gray-500 text-sm">Try a different recipe or ingredient.</p>
+          </div>
+        )}
+      </div>
+      <BottomNav />
+    </div>
+  );
+}

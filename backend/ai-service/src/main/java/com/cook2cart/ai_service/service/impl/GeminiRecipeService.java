@@ -32,7 +32,7 @@ public class GeminiRecipeService implements RecipeService {
     @Value("${gemini.api.key:}")
     private String apiKey;
 
-    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent}")
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent}")
     private String geminiUrl;
 
     @Override

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
+import PremiumBackground from '../components/PremiumBackground';
 import DownloadButton from '../components/DownloadButton';
 import { videoCatalogService } from '../utils/api';
 
@@ -35,7 +36,8 @@ export default function FavoritesPage() {
   };
 
   return (
-    <div className="bg-white min-h-screen pb-20">
+    <div className="c2c-root min-h-screen pb-20 overflow-x-hidden relative bg-[white]">
+      <PremiumBackground />
       <AppBar />
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
 

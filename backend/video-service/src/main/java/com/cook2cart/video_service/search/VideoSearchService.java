@@ -3,6 +3,8 @@ package com.cook2cart.video_service.search;
 import com.cook2cart.video_service.dto.YouTubeVideoDTO;
 import com.cook2cart.video_service.entity.UserVideoAction;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -18,7 +20,8 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class VideoSearchService {
 
-    private final VideoSearchRepository videoSearchRepository;
+    private static final Logger log = LoggerFactory.getLogger(VideoSearchService.class);
+
     private final ElasticsearchOperations elasticsearchOperations;
 
     public VideoSearchDocument indexVideo(VideoIndexRequest request) {
@@ -32,7 +35,7 @@ public class VideoSearchService {
                 .searchedAt(LocalDateTime.now())
                 .build();
 
-        return videoSearchRepository.save(document);
+        return elasticsearchOperations.save(document);
     }
 
     public void indexUserVideoAction(UserVideoAction action) {
@@ -52,7 +55,7 @@ public class VideoSearchService {
                 .searchedAt(action.getCreatedAt())
                 .build();
 
-        videoSearchRepository.save(document);
+        elasticsearchOperations.save(document);
     }
 
     public void indexYouTubeResults(String keyword, List<YouTubeVideoDTO> videos) {
@@ -73,7 +76,11 @@ public class VideoSearchService {
                         .build())
                 .toList();
 
-        videoSearchRepository.saveAll(documents);
+        try {
+            elasticsearchOperations.save(documents);
+        } catch (Exception ex) {
+            log.warn("Could not index YouTube search results in Elasticsearch: {}", ex.getMessage());
+        }
     }
 
     public List<String> getSuggestions(String prefix) {
@@ -91,14 +98,19 @@ public class VideoSearchService {
                 .withPageable(PageRequest.of(0, 10))
                 .build();
 
-        return elasticsearchOperations.search(query, VideoSearchDocument.class)
-                .stream()
-                .map(SearchHit::getContent)
-                .map(VideoSearchDocument::getTitle)
-                .filter(Objects::nonNull)
-                .distinct()
-                .limit(10)
-                .toList();
+        try {
+            return elasticsearchOperations.search(query, VideoSearchDocument.class)
+                    .stream()
+                    .map(SearchHit::getContent)
+                    .map(VideoSearchDocument::getTitle)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .limit(10)
+                    .toList();
+        } catch (Exception ex) {
+            log.warn("Could not load video search suggestions from Elasticsearch: {}", ex.getMessage());
+            return List.of();
+        }
     }
 
     public List<VideoSearchDocument> searchHistory(String keyword) {
@@ -113,10 +125,15 @@ public class VideoSearchService {
                 .withPageable(PageRequest.of(0, 25))
                 .build();
 
-        return elasticsearchOperations.search(query, VideoSearchDocument.class)
-                .stream()
-                .map(SearchHit::getContent)
-                .toList();
+        try {
+            return elasticsearchOperations.search(query, VideoSearchDocument.class)
+                    .stream()
+                    .map(SearchHit::getContent)
+                    .toList();
+        } catch (Exception ex) {
+            log.warn("Could not search video history in Elasticsearch: {}", ex.getMessage());
+            return List.of();
+        }
     }
 
     public List<VideoSearchDocument> searchUserVideos(Long userId, String actionType, String keyword) {
@@ -133,14 +150,19 @@ public class VideoSearchService {
                 .withPageable(PageRequest.of(0, 25))
                 .build();
 
-        return elasticsearchOperations.search(query, VideoSearchDocument.class)
-                .stream()
-                .map(SearchHit::getContent)
-                .toList();
+        try {
+            return elasticsearchOperations.search(query, VideoSearchDocument.class)
+                    .stream()
+                    .map(SearchHit::getContent)
+                    .toList();
+        } catch (Exception ex) {
+            log.warn("Could not search user videos in Elasticsearch: {}", ex.getMessage());
+            return List.of();
+        }
     }
 
     public void deleteById(String id) {
-        videoSearchRepository.deleteById(id);
+        elasticsearchOperations.delete(id, VideoSearchDocument.class);
     }
 
     private String buildDocumentId(String videoId, String keyword) {

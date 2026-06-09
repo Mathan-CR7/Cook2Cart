@@ -41,8 +41,12 @@ public class VideoController {
         log.info("Search request received: {}", query);
         Cache cache = cacheManager.getCache("youtubeSearch");
         String cacheKey = RedisCacheKeyUtil.youtubeSearchKey(query);
-        if (cache != null && cache.get(cacheKey) != null) {
-            log.info("CACHE HIT: Returning result from Redis for key: {}", cacheKey);
+        try {
+            if (cache != null && cache.get(cacheKey) != null) {
+                log.info("CACHE HIT: Returning result from Redis for key: {}", cacheKey);
+            }
+        } catch (Exception ex) {
+            log.warn("Could not check Redis cache for key: {}", cacheKey, ex);
         }
         return youTubeSearchService.searchVideos(query);
     }

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Chef Hat Outline -->
+  <path
+    d="M 32 60 L 68 60 L 68 48 C 80 48, 82 36, 65 36 C 65 18, 35 18, 35 36 C 18 36, 20 48, 32 48 Z"
+    stroke="#ff6b35"
+    stroke-width="6"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    fill="white"
+  />
+  <!-- Inner vents (vertical lines) -->
+  <path
+    d="M 44 51 V 57 M 56 51 V 57"
+    stroke="#ff6b35"
+    stroke-width="5.5"
+    stroke-linecap="round"
+  />
+  <!-- Cart Base -->
+  <path
+    d="M 26 69 C 26 69, 28 77, 50 77 C 72 77, 74 69, 74 69"
+    stroke="#1e2229"
+    stroke-width="6.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- Cart Wheels -->
+  <circle cx="37" cy="85" r="5" fill="#1e2229" />
+  <circle cx="63" cy="85" r="5" fill="#1e2229" />
+</svg>

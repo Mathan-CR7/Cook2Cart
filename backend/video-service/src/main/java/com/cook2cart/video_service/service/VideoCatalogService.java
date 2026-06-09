@@ -90,6 +90,7 @@ public class VideoCatalogService {
         return toUserVideoActionDTO(savedAction);
     }
 
+    @Transactional(readOnly = true)
     public List<UserVideoActionDTO> getUserVideoActions(Long userId, UserVideoActionType actionType) {
         return userVideoActionRepository.findByUserIdAndActionTypeOrderByCreatedAtDesc(userId, actionType)
                 .stream()

@@ -23,4 +23,14 @@ public class RecipeCatalogController {
     public List<RecipeDTO> getRecipesByUser(@PathVariable Long userId) {
         return recipeCatalogService.getRecipesByUser(userId);
     }
+
+    @GetMapping("/video/{videoId}")
+    public RecipeDTO getLatestRecipeByVideo(@PathVariable Long videoId) {
+        return recipeCatalogService.getLatestRecipeByVideoId(videoId);
+    }
+
+    @GetMapping("/{recipeId}/ingredients")
+    public List<RecipeIngredientDTO> getRecipeIngredients(@PathVariable Long recipeId) {
+        return recipeCatalogService.getRecipeIngredients(recipeId);
+    }
 }

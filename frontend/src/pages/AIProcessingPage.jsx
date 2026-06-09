@@ -141,6 +141,33 @@ export default function AIProcessingPage() {
         }
       };
 
+      const syncStoredRecipe = (ingredients, instructions = []) => {
+        const storedRecipe = {
+          id: videoId,
+          videoId,
+          dbVideoId,
+          dbRecipeId,
+          title: videoTitle,
+          channelTitle: locationState?.channelTitle || locationState?.channelName || 'Cook2Cart',
+          thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          videoUrl: youtubeUrl,
+          savedAt: new Date().toISOString(),
+          ingredients,
+          instructions,
+        };
+
+        const wasSaved = state.savedRecipes?.some((item) => String(item.id) === String(videoId));
+        const wasFavorite = state.favoriteRecipes?.some((item) => String(item.id) === String(videoId));
+
+        if (wasSaved) {
+          dispatch({ type: 'SAVE_RECIPE', payload: storedRecipe });
+        }
+
+        if (wasFavorite) {
+          dispatch({ type: 'ADD_FAVORITE_RECIPE', payload: storedRecipe });
+        }
+      };
+
       dispatch({
         type: 'SET_SELECTED_RECIPE',
         payload: {
@@ -247,6 +274,7 @@ export default function AIProcessingPage() {
             instructions: instructions
           }
         });
+        syncStoredRecipe(dbIngredients, instructions);
         setTimeout(() => {
           navigate(`/review/${videoId}`);
         }, 1200);
@@ -331,6 +359,7 @@ export default function AIProcessingPage() {
                     instructions: fallbackInstructions
                   }
                 });
+                syncStoredRecipe(dbIngredients, fallbackInstructions);
               });
               setTimeout(() => {
                 navigate(`/review/${videoId}`);

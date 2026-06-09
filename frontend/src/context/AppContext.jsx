@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect } from 'react';
-import { authService, videoCatalogService } from '../utils/api';
+import { addressService, authService, videoCatalogService } from '../utils/api';
 
 const AppContext = createContext();
 
@@ -16,8 +16,8 @@ const initialState = {
   extractedInstructions: JSON.parse(localStorage.getItem('extractedInstructions') || '[]'),
   cart: JSON.parse(localStorage.getItem('cart') || '[]'),
   cartObject: JSON.parse(localStorage.getItem('cartObject') || 'null'),
-  addresses: [],
-  selectedAddress: null,
+  addresses: JSON.parse(localStorage.getItem('addresses') || '[]'),
+  selectedAddress: JSON.parse(localStorage.getItem('selectedAddress') || 'null'),
   orderConfirmed: false,
   recentRecipes: JSON.parse(localStorage.getItem('recentRecipes') || '[]'),
   savedRecipes: JSON.parse(localStorage.getItem('savedRecipes') || '[]'),
@@ -162,13 +162,18 @@ function appReducer(state, action) {
     }
 
     case 'SET_ADDRESSES':
+      localStorage.setItem('addresses', JSON.stringify(action.payload || []));
       return { ...state, addresses: action.payload };
 
     case 'SET_SELECTED_ADDRESS':
+      localStorage.setItem('selectedAddress', JSON.stringify(action.payload || null));
       return { ...state, selectedAddress: action.payload };
 
-    case 'ADD_ADDRESS':
-      return { ...state, addresses: [...state.addresses, action.payload] };
+    case 'ADD_ADDRESS': {
+      const nextAddresses = [action.payload, ...state.addresses.filter((item) => String(item.id) !== String(action.payload.id))];
+      localStorage.setItem('addresses', JSON.stringify(nextAddresses));
+      return { ...state, addresses: nextAddresses };
+    }
 
     case 'CONFIRM_ORDER':
       return { ...state, orderConfirmed: true };
@@ -266,6 +271,12 @@ export function AppProvider({ children }) {
     instructions: [],
   });
 
+  const hydrateAddresses = async () => {
+    const res = await addressService.getAddresses();
+    const addresses = Array.isArray(res.data) ? res.data : [];
+    dispatch({ type: 'SET_ADDRESSES', payload: addresses });
+  };
+
   const hydrateVideoActions = async (userId) => {
     const [history, saved, favorites] = await Promise.all([
       videoCatalogService.getUserActions(userId, 'HISTORY'),
@@ -293,6 +304,9 @@ export function AppProvider({ children }) {
               console.error('Failed to load saved video actions:', err);
             });
           }
+          hydrateAddresses().catch((err) => {
+            console.error('Failed to load saved addresses:', err);
+          });
         })
         .catch(() => {
           localStorage.removeItem('token');

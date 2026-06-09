@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import FAB from '../components/FAB';
-import { cartCatalogService, cartService, recipeCatalogService, videoCatalogService } from '../utils/api';
+import { recipeCatalogService, videoCatalogService } from '../utils/api';
 import DownloadButton from '../components/DownloadButton';
 
 const toNumber = (value, fallback = 1) => {
@@ -21,30 +21,6 @@ const mapIngredientForRecipeDb = (ingredient) => ({
   estimated: Boolean(ingredient.estimated),
   source: ingredient.source || 'user',
   confidence: toNumber(ingredient.confidence, 1),
-});
-
-const mapCartItemForDb = (item, recipeId = null) => ({
-  ingredientId: item.ingredientId || item.dbIngredientId || null,
-  selectedProductId: item.selectedProductId || null,
-  recipeId: recipeId || item.recipeId || null,
-  ingredientName: item.originalName || item.ingredientName || item.name || item.selectedProduct?.name || 'Ingredient',
-  recipeQuantity: toNumber(item.recipeQuantity ?? item.quantity, 1),
-  recipeUnit: item.recipeUnit || item.unit || 'pcs',
-  quantity: toNumber(item.quantity ?? item.recipeQuantity, 1),
-  unit: item.unit || item.recipeUnit || 'pcs',
-  price: toNumber(item.price, 0) * toNumber(item.qty, 1),
-  estimatedPrice: toNumber(item.price, 0) * toNumber(item.qty, 1),
-  availableAtHome: Boolean(item.availableAtHome),
-  selectedProduct: item.selectedProduct ? {
-    ingredientId: item.ingredientId || item.dbIngredientId || null,
-    productName: item.selectedProduct.name || item.selectedProduct.productName || item.originalName || item.name || 'Product',
-    brand: item.selectedProduct.brand || 'Generic',
-    size: item.selectedProduct.size || `${item.quantity || item.recipeQuantity || 1} ${item.unit || item.recipeUnit || 'pcs'}`,
-    price: toNumber(item.selectedProduct.price ?? item.price, 0),
-    imageUrl: item.selectedProduct.imageUrl || item.selectedProduct.image || null,
-    source: item.selectedProduct.source || 'Cook2Cart',
-    availability: item.selectedProduct.availability || 'AVAILABLE',
-  } : null,
 });
 
 export default function RecipeReviewPage() {
@@ -79,7 +55,7 @@ export default function RecipeReviewPage() {
     setTimeout(() => setJustSaved(false), 2000);
 
     const saveVideoAction = async () => {
-      if (!state.user?.id) return;
+      if (!state.user?.id) return recipe.dbVideoId;
       let dbVideoId = state.selectedRecipe?.dbVideoId;
 
       if (!dbVideoId) {
@@ -94,21 +70,23 @@ export default function RecipeReviewPage() {
         dbVideoId = response.data.id;
       }
 
+      recipe.dbVideoId = dbVideoId;
       await videoCatalogService.saveUserAction({
         userId: state.user.id,
         videoId: dbVideoId,
         actionType: 'SAVED',
       });
+      return dbVideoId;
     };
 
     try {
-      await saveVideoAction();
+      const savedDbVideoId = await saveVideoAction();
       let recipeId = state.selectedRecipe?.dbRecipeId;
 
       if (!recipeId) {
         const response = await recipeCatalogService.createRecipe({
           userId: state.user?.id || null,
-          videoId: state.selectedRecipe?.dbVideoId || null,
+          videoId: savedDbVideoId || recipe.dbVideoId || state.selectedRecipe?.dbVideoId || null,
           recipeName: recipe.title,
           cuisine: null,
           thumbnailUrl: recipe.thumbnailUrl,
@@ -120,7 +98,7 @@ export default function RecipeReviewPage() {
         dispatch({ type: 'SAVE_RECIPE', payload: recipe });
         dispatch({
           type: 'SET_SELECTED_RECIPE',
-          payload: { ...state.selectedRecipe, dbRecipeId: recipeId },
+          payload: { ...state.selectedRecipe, dbRecipeId: recipeId, dbVideoId: savedDbVideoId || recipe.dbVideoId },
         });
       }
 
@@ -160,153 +138,31 @@ export default function RecipeReviewPage() {
     return 'text-red-600 bg-red-50';
   };
 
-  const generateCartItem = (ing) => {
-    const name = (ing.name || '').toLowerCase();
-    const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
-    const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
-    
-    let brands = ['India Gate', 'Aashirvaad', 'Daawat', 'Fortune'];
-    let sizes = ['1kg', '5kg', '10kg'];
-    let basePrice = 50;
-    let productName = ing.name;
-
-    if (name.includes('rice')) {
-      brands = ['India Gate', 'Aashirvaad', 'Daawat', 'Fortune'];
-      sizes = ['1kg', '5kg', '10kg'];
-      productName = 'Basmati Rice';
-      basePrice = 140;
-    } else if (name.includes('pasta')) {
-      brands = ['Disano', 'Bambino', 'Barilla', 'Weikfield'];
-      sizes = ['250g', '500g', '1kg'];
-      productName = 'Penne Pasta';
-      basePrice = 90;
-    } else if (name.includes('oil')) {
-      brands = ['Fortune', 'Saffola', 'Gemini', 'Dhara'];
-      sizes = ['1L', '2L', '5L'];
-      productName = 'Refined Oil';
-      basePrice = 160;
-    } else if (name.includes('salt')) {
-      brands = ['Tata Salt', 'Aashirvaad', 'Catch', 'Patanjali'];
-      sizes = ['1kg', '2kg'];
-      productName = 'Iodized Salt';
-      basePrice = 28;
-    } else if (name.includes('garlic') || name.includes('ginger') || name.includes('onion') || name.includes('carrot') || name.includes('peas')) {
-      brands = ['Fresh Organics', 'Local Farms', 'VeggieFresh'];
-      sizes = ['250g', '500g', '1kg'];
-      productName = ing.name;
-      basePrice = 40;
-    } else if (name.includes('butter')) {
-      brands = ['Amul', 'Mother Dairy', 'Britannia', 'Nandini'];
-      sizes = ['100g', '200g', '500g'];
-      productName = 'Table Butter';
-      basePrice = 56;
-    } else if (name.includes('maida') || name.includes('flour')) {
-      brands = ['Aashirvaad', 'Fortune', 'Patanjali', 'Rajdhani'];
-      sizes = ['1kg', '2kg', '5kg'];
-      productName = ing.name;
-      basePrice = 45;
-    } else if (name.includes('milk')) {
-      brands = ['Amul', 'Mother Dairy', 'Nandini', 'Aavin'];
-      sizes = ['500ml', '1L'];
-      productName = 'Pasteurized Milk';
-      basePrice = 30;
-    } else {
-      brands = ['Catch', 'Everest', 'MTR', 'MDH'];
-      sizes = ['100g', '250g', '500g'];
-      productName = ing.name;
-      basePrice = 45;
-    }
-
-    const availableProducts = [];
-    brands.forEach(brand => {
-      sizes.forEach(size => {
-        let factor = 1.0;
-        if (size.endsWith('kg') || size.endsWith('L')) {
-          const val = parseFloat(size);
-          factor = val === 1 ? 1.0 : val === 2 ? 1.9 : val === 5 ? 4.5 : val === 10 ? 8.5 : val;
-        } else if (size.endsWith('g') || size.endsWith('ml')) {
-          const val = parseFloat(size);
-          factor = val === 100 ? 0.15 : val === 200 ? 0.28 : val === 250 ? 0.35 : val === 500 ? 0.65 : 1.0;
-        }
-        
-        const priceVal = Math.round(basePrice * factor * (brand === brands[0] ? 1.0 : brand === brands[1] ? 0.95 : brand === brands[2] ? 0.9 : 0.85));
-
-        availableProducts.push({
-          id: `dyn_${name.replace(/\s+/g, '_')}_${brand.toLowerCase().replace(/\s+/g, '_')}_${size}`,
-          name: brand === brands[0] ? productName : `${brand} ${productName}`,
-          brand: brand,
-          size: size,
-          price: priceVal,
-          category: productName
-        });
-      });
-    });
-
-    const selectedBrand = brands[0];
-    const selectedSize = sizes[0];
-    const selectedProduct = availableProducts.find(p => p.brand === selectedBrand && p.size === selectedSize) || availableProducts[0];
-
-    return {
-      ingredientId: ing.ingredientId || ing.dbIngredientId || null,
-      ingredientName: name,
-      originalName: ing.name,
-      recipeQuantity: parseFloat(displayQty) || 1,
-      recipeUnit: displayUnit,
-      quantity: (parseFloat(displayQty) || 1) * (name.includes('rice') ? 400 : 100),
-      unit: name.includes('oil') || name.includes('milk') ? 'ml' : 'g',
-      baseQuantity: name.includes('rice') ? 400 : 100,
-      availableProducts: availableProducts,
-      selectedProduct: selectedProduct,
-      availableBrands: brands,
-      selectedBrand: selectedBrand,
-      availableSizes: sizes,
-      selectedSize: selectedSize,
-      price: selectedProduct.price,
-      qty: 1,
-      availableAtHome: name.includes('salt') || name.includes('water') || name.includes('oil'),
-      recommendedBrands: brands
-    };
-  };
-
   const handleContinue = async () => {
     try {
-      const formattedIngredients = ingredients.map(ing => {
-        const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
-        const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
-        return {
-          ingredientId: ing.ingredientId || ing.dbIngredientId || null,
-          name: ing.name,
-          recipeQuantity: parseFloat(displayQty) || 1,
-          recipeUnit: displayUnit,
-          quantity: parseFloat(displayQty) || 1,
-          unit: displayUnit,
-          confidence: ing.confidence || 0.95
-        };
-      });
-      const response = await cartService.initialize(formattedIngredients, 4);
-      dispatch({ type: 'SET_CART', payload: response.data });
-      const generatedItems = Array.isArray(response.data) ? response.data : (response.data?.items || []);
-      const dbItems = generatedItems.map((item) => mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null));
-      if (dbItems.length > 0) {
-        cartCatalogService.createCart({
+      let recipeId = state.selectedRecipe?.dbRecipeId;
+
+      if (!recipeId) {
+        const response = await recipeCatalogService.createRecipe({
           userId: state.user?.id || null,
-          items: dbItems,
-        }).catch((err) => {
-          console.error('Failed to save generated cart to database, continuing:', err);
+          videoId: state.selectedRecipe?.dbVideoId || null,
+          recipeName: state.selectedRecipe?.title || 'My Recipe',
+          cuisine: null,
+          thumbnailUrl: state.selectedRecipe?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          ingredients: state.extractedIngredients.map(mapIngredientForRecipeDb),
+          instructions: state.extractedInstructions || [],
+        });
+        recipeId = response.data.id;
+        dispatch({
+          type: 'SET_SELECTED_RECIPE',
+          payload: { ...state.selectedRecipe, dbRecipeId: recipeId },
         });
       }
-      navigate(`/cart/${videoId}`);
+
+      navigate(`/location/${recipeId}`);
     } catch (err) {
-      console.error('Failed to initialize cart on backend, falling back to local simulation:', err);
-      const cart = ingredients.map(ing => generateCartItem(ing));
-      dispatch({ type: 'SET_CART', payload: cart });
-      cartCatalogService.createCart({
-        userId: state.user?.id || null,
-        items: cart.map((item) => mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null)),
-      }).catch((saveErr) => {
-        console.error('Failed to save fallback cart to database, continuing:', saveErr);
-      });
-      navigate(`/cart/${videoId}`);
+      console.error('Failed to save recipe before cart generation:', err);
+      navigate(`/location/${state.selectedRecipe?.dbRecipeId || videoId}`);
     }
   };
 

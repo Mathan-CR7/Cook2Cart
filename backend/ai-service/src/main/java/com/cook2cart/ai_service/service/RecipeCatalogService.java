@@ -72,6 +72,35 @@ public class RecipeCatalogService {
         return recipeRepository.findByUserId(userId).stream().map(this::toRecipeDTO).toList();
     }
 
+    @Transactional(readOnly = true)
+    public RecipeDTO getLatestRecipeByVideoId(Long videoId) {
+        Recipe recipe = recipeRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId)
+                .orElseThrow(() -> new RuntimeException("Recipe not found for video"));
+
+        return toRecipeDTO(recipe);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RecipeIngredientDTO> getRecipeIngredients(Long recipeId) {
+        Recipe recipe = recipeRepository.findById(recipeId)
+                .orElseThrow(() -> new RuntimeException("Recipe not found"));
+
+        return recipe.getIngredients().stream()
+                .map(item -> new RecipeIngredientDTO(
+                        item.getId(),
+                        item.getIngredient() != null ? item.getIngredient().getId() : null,
+                        item.getIngredient() != null ? item.getIngredient().getName() : null,
+                        item.getRecipeQuantity(),
+                        item.getRecipeUnit(),
+                        item.getQuantity(),
+                        item.getUnit(),
+                        item.getEstimated(),
+                        item.getSource(),
+                        item.getConfidence()
+                ))
+                .toList();
+    }
+
     private IngredientEntity getOrCreateIngredient(String rawName) {
         String name = normalizeIngredientName(rawName);
 

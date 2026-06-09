@@ -5,6 +5,7 @@ export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
 export const getApiErrorMessage = (error, fallback = 'Something went wrong.') => {
@@ -76,6 +77,13 @@ export const aiService = {
 export const recipeCatalogService = {
   createRecipe: (data) => api.post('/api/recipes', data),
   getRecipesByUser: (userId) => api.get(`/api/recipes/user/${userId}`),
+  getLatestRecipeByVideo: (videoId) => api.get(`/api/recipes/video/${videoId}`),
+  getRecipeIngredients: (recipeId) => api.get(`/api/recipes/${recipeId}/ingredients`),
+};
+
+export const productService = {
+  generateSuggestions: (recipeId) => api.post(`/products/generate/${recipeId}`),
+  getSuggestionsByRecipe: (recipeId) => api.get(`/products/recipe/${recipeId}`),
 };
 
 export const cartService = {
@@ -90,6 +98,7 @@ export const cartCatalogService = {
   getCart: (cartId) => api.get(`/api/carts/${cartId}`),
   getCartsByUser: (userId) => api.get(`/api/carts/user/${userId}`),
   updateStatus: (cartId, status) => api.patch(`/api/carts/${cartId}/status`, null, { params: { status } }),
+  saveProduct: (data) => api.post('/api/carts/products', data),
 };
 
 export default api;

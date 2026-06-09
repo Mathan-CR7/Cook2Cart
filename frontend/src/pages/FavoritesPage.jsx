@@ -5,7 +5,7 @@ import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
 import DownloadButton from '../components/DownloadButton';
-import { videoCatalogService } from '../utils/api';
+import { recipeCatalogService, videoCatalogService } from '../utils/api';
 
 export default function FavoritesPage() {
   const navigate = useNavigate();
@@ -33,6 +33,71 @@ export default function FavoritesPage() {
     return new Date(iso).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'short', year: 'numeric',
     });
+  };
+
+  const mapIngredient = (ingredient) => ({
+    id: ingredient.id,
+    ingredientId: ingredient.ingredientId,
+    dbIngredientId: ingredient.ingredientId,
+    name: ingredient.ingredientName,
+    recipeQuantity: ingredient.recipeQuantity,
+    recipeUnit: ingredient.recipeUnit,
+    quantity: ingredient.quantity,
+    unit: ingredient.unit,
+    estimated: ingredient.estimated,
+    source: ingredient.source,
+    confidence: ingredient.confidence,
+  });
+
+  const openStoredRecipe = async (recipe) => {
+    const recipeIngredients = recipe.ingredients || [];
+    const recipeInstructions = recipe.instructions || [];
+
+    if (recipeIngredients.length > 0 || recipeInstructions.length > 0) {
+      dispatch({
+        type: 'SET_SELECTED_RECIPE',
+        payload: {
+          ...recipe,
+          id: recipe.videoId || recipe.id,
+          videoId: recipe.videoId || recipe.id,
+        },
+      });
+      dispatch({
+        type: 'FINISH_AI_PROCESSING',
+        payload: { ingredients: recipeIngredients, instructions: recipeInstructions },
+      });
+      navigate(`/review/${recipe.videoId || recipe.id}`);
+      return;
+    }
+
+    if (recipe.dbVideoId) {
+      try {
+        const res = await recipeCatalogService.getLatestRecipeByVideo(recipe.dbVideoId);
+        const savedRecipe = res.data;
+        const ingredients = (savedRecipe.ingredients || []).map(mapIngredient);
+        const instructions = (savedRecipe.instructions || []).map((item) => item.instruction);
+
+        dispatch({
+          type: 'SET_SELECTED_RECIPE',
+          payload: {
+            ...recipe,
+            id: recipe.videoId || recipe.id,
+            videoId: recipe.videoId || recipe.id,
+            dbRecipeId: savedRecipe.id,
+            dbVideoId: savedRecipe.videoId || recipe.dbVideoId,
+            title: savedRecipe.recipeName || recipe.title,
+            thumbnailUrl: savedRecipe.thumbnailUrl || recipe.thumbnailUrl,
+          },
+        });
+        dispatch({ type: 'FINISH_AI_PROCESSING', payload: { ingredients, instructions } });
+        navigate(`/review/${recipe.videoId || recipe.id}`);
+        return;
+      } catch (err) {
+        console.error('Failed to load extracted recipe from database:', err);
+      }
+    }
+
+    navigate(`/review/${recipe.videoId || recipe.id}`);
   };
 
   return (
@@ -129,6 +194,14 @@ export default function FavoritesPage() {
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
+                      </button>
+
+                      <button
+                        onClick={() => openStoredRecipe(recipe)}
+                        className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-orange-50 hover:text-orange-500 hover:border-orange-200 transition-all"
+                        title="Open saved recipe"
+                      >
+                        <span className="material-icon !text-lg">visibility</span>
                       </button>
 
                       {/* Download */}

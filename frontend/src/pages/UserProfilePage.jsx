@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
+import { addressService, recipeCatalogService } from '../utils/api';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: 'person' },
@@ -20,6 +21,95 @@ export default function UserProfilePage() {
   const user = state.user || { name: 'John Doe', email: 'john@example.com' };
   const addresses = state.addresses || [];
   const recentRecipes = state.recentRecipes || [];
+  const favoriteRecipes = state.favoriteRecipes || [];
+
+  const formatAddress = (address) => {
+    if (address.label) return address.label;
+    if (address.addressType === 'CURRENT_LOCATION') {
+      return `Current Location (${Number(address.latitude).toFixed(4)}, ${Number(address.longitude).toFixed(4)})`;
+    }
+    return [address.doorNo, address.street, address.city, address.state, address.pincode]
+      .filter(Boolean)
+      .join(', ');
+  };
+
+  useEffect(() => {
+    if (!state.isAuthenticated) return;
+
+    addressService.getAddresses()
+      .then((res) => {
+        const nextAddresses = Array.isArray(res.data) ? res.data : [];
+        dispatch({ type: 'SET_ADDRESSES', payload: nextAddresses });
+      })
+      .catch((err) => {
+        console.error('Failed to load profile addresses:', err);
+      });
+  }, [dispatch, state.isAuthenticated]);
+
+  const mapIngredient = (ingredient) => ({
+    id: ingredient.id,
+    ingredientId: ingredient.ingredientId,
+    dbIngredientId: ingredient.ingredientId,
+    name: ingredient.ingredientName,
+    recipeQuantity: ingredient.recipeQuantity,
+    recipeUnit: ingredient.recipeUnit,
+    quantity: ingredient.quantity,
+    unit: ingredient.unit,
+    estimated: ingredient.estimated,
+    source: ingredient.source,
+    confidence: ingredient.confidence,
+  });
+
+  const openStoredRecipe = async (recipe) => {
+    const recipeIngredients = recipe.ingredients || [];
+    const recipeInstructions = recipe.instructions || [];
+
+    if (recipeIngredients.length > 0 || recipeInstructions.length > 0) {
+      dispatch({
+        type: 'SET_SELECTED_RECIPE',
+        payload: {
+          ...recipe,
+          id: recipe.videoId || recipe.id,
+          videoId: recipe.videoId || recipe.id,
+        },
+      });
+      dispatch({
+        type: 'FINISH_AI_PROCESSING',
+        payload: { ingredients: recipeIngredients, instructions: recipeInstructions },
+      });
+      navigate(`/review/${recipe.videoId || recipe.id}`);
+      return;
+    }
+
+    if (recipe.dbVideoId) {
+      try {
+        const res = await recipeCatalogService.getLatestRecipeByVideo(recipe.dbVideoId);
+        const savedRecipe = res.data;
+        const ingredients = (savedRecipe.ingredients || []).map(mapIngredient);
+        const instructions = (savedRecipe.instructions || []).map((item) => item.instruction);
+
+        dispatch({
+          type: 'SET_SELECTED_RECIPE',
+          payload: {
+            ...recipe,
+            id: recipe.videoId || recipe.id,
+            videoId: recipe.videoId || recipe.id,
+            dbRecipeId: savedRecipe.id,
+            dbVideoId: savedRecipe.videoId || recipe.dbVideoId,
+            title: savedRecipe.recipeName || recipe.title,
+            thumbnailUrl: savedRecipe.thumbnailUrl || recipe.thumbnailUrl,
+          },
+        });
+        dispatch({ type: 'FINISH_AI_PROCESSING', payload: { ingredients, instructions } });
+        navigate(`/review/${recipe.videoId || recipe.id}`);
+        return;
+      } catch (err) {
+        console.error('Failed to load extracted recipe from database:', err);
+      }
+    }
+
+    navigate(`/review/${recipe.videoId || recipe.id}`);
+  };
 
   return (
     <div className="c2c-root min-h-screen pb-32 overflow-x-hidden relative bg-[white]">
@@ -127,7 +217,7 @@ export default function UserProfilePage() {
                       <div key={i} className="bg-white/40 border border-white/60 rounded-2xl px-5 py-4 flex items-start gap-4 shadow-sm">
                         <span className="material-icon text-lg text-[#ff6b35] mt-1">location_on</span>
                         <div className="font-display">
-                          <p className="font-bold text-[#1e2229] text-sm">{addr.label}</p>
+                          <p className="font-bold text-[#1e2229] text-sm">{formatAddress(addr)}</p>
                           {addr.addressType === 'MANUAL' && (
                             <p className="text-xs text-gray-500 mt-1.5 leading-relaxed font-medium">
                               {addr.doorNo}, {addr.street}, {addr.city}, {addr.state} - {addr.pincode}
@@ -181,13 +271,13 @@ export default function UserProfilePage() {
                   <span>Favorite Saved Recipes</span>
                 </h3>
                 
-                {state.savedRecipes && state.savedRecipes.length > 0 ? (
+                {favoriteRecipes.length > 0 ? (
                   <div className="flex flex-col gap-3">
-                    {state.savedRecipes.map((recipe, i) => (
+                    {favoriteRecipes.map((recipe, i) => (
                       <div 
                         key={i} 
                         className="bg-white/40 border border-white/60 rounded-2xl p-3 flex items-center gap-4 hover:border-[#ff6b35]/20 transition-all cursor-pointer shadow-sm"
-                        onClick={() => navigate(`/review/${recipe.videoId || recipe.id}`)}
+                        onClick={() => openStoredRecipe(recipe)}
                       >
                         <img 
                           src={recipe.thumbnailUrl} 
@@ -205,8 +295,8 @@ export default function UserProfilePage() {
                 ) : (
                   <div className="bg-white/40 rounded-2xl p-12 text-center border border-dashed border-gray-200 shadow-sm">
                     <span className="material-icon text-3xl text-[#ff6b35] block mb-2">favorite_border</span>
-                    <p className="text-gray-400 text-xs font-bold font-display">No bookmark recipes saved yet.</p>
-                    <p className="text-gray-450 text-[10px] mt-1 font-display">Save items by checking the bookmark icon on reviews.</p>
+                    <p className="text-gray-400 text-xs font-bold font-display">No favorite recipes yet.</p>
+                    <p className="text-gray-450 text-[10px] mt-1 font-display">Tap the heart icon on a video to add it here.</p>
                   </div>
                 )}
               </div>

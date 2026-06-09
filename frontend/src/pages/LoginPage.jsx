@@ -27,7 +27,9 @@ export default function LoginPage() {
     const email = searchParams.get('email') || '';
 
     localStorage.setItem('token', token);
-    dispatch({ type: 'SET_USER', payload: { name, email } });
+    authService.getProfile()
+      .then((res) => dispatch({ type: 'SET_USER', payload: res.data }))
+      .catch(() => dispatch({ type: 'SET_USER', payload: { name, email } }));
     const savedRedirect = localStorage.getItem('oauthRedirect');
     localStorage.removeItem('oauthRedirect');
     navigate(savedRedirect || redirectTo, { replace: true });
@@ -61,7 +63,12 @@ export default function LoginPage() {
 
       const { token, name, email } = res.data;
       localStorage.setItem('token', token);
-      dispatch({ type: 'SET_USER', payload: { name, email } });
+      try {
+        const profile = await authService.getProfile();
+        dispatch({ type: 'SET_USER', payload: profile.data });
+      } catch {
+        dispatch({ type: 'SET_USER', payload: { name, email } });
+      }
       navigate(redirectTo, { replace: true });
     } catch (err) {
       const msg = err.response?.data || err.message || 'Something went wrong';

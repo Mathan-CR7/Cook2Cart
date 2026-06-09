@@ -9,7 +9,7 @@ import { addressService, getApiErrorMessage } from '../utils/api';
 export default function LocationSelectionPage() {
   const navigate = useNavigate();
   const { videoId } = useParams();
-  const nextPath = videoId === 'profile' ? '/profile' : `/order/${videoId}`;
+  const nextPath = videoId === 'profile' ? '/profile' : `/cart/${videoId}`;
   const { state, dispatch } = useApp();
   const [useCurrent, setUseCurrent] = useState(false);
   const [manual, setManual] = useState({ doorNo: '', street: '', city: '', state: '', pincode: '' });
@@ -82,6 +82,7 @@ export default function LocationSelectionPage() {
         try {
           await addressService.addLocation(location);
           const address = {
+            id: `local-location-${Date.now()}`,
             ...location,
             addressType: 'CURRENT_LOCATION',
             label: `Current Location (${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)})`,
@@ -89,6 +90,8 @@ export default function LocationSelectionPage() {
 
           setUseCurrent(true);
           setSelectedAddressId(null);
+          setSavedAddresses((items) => [address, ...items]);
+          dispatch({ type: 'ADD_ADDRESS', payload: address });
           dispatch({ type: 'SET_SELECTED_ADDRESS', payload: address });
           await refreshAddresses();
         } catch (err) {
@@ -112,7 +115,9 @@ export default function LocationSelectionPage() {
 
     try {
       await addressService.addManual(manual);
-      const address = { ...manual, addressType: 'MANUAL', label: `${manual.doorNo}, ${manual.street}` };
+      const address = { id: `local-manual-${Date.now()}`, ...manual, addressType: 'MANUAL', label: `${manual.doorNo}, ${manual.street}` };
+      setSavedAddresses((items) => [address, ...items]);
+      dispatch({ type: 'ADD_ADDRESS', payload: address });
       dispatch({ type: 'SET_SELECTED_ADDRESS', payload: address });
       await refreshAddresses();
       navigate(nextPath);

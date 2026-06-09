@@ -32,7 +32,7 @@ export default function UserProfilePage() {
         <div className="glass border border-white/60 rounded-3xl p-8 text-center mb-8 relative overflow-hidden shadow-sm">
           <div className="absolute top-0 left-0 w-full h-[6px] gradient-bg" />
           
-          <div className="w-20 h-20 mx-auto rounded-2xl gradient-bg flex items-center justify-center text-white text-3xl font-display font-black mb-5 shadow-md border border-white/20 relative overflow-hidden">
+          <div className="w-20 h-20 mx-auto rounded-full bg-black flex items-center justify-center text-white text-3xl font-display font-black mb-5 shadow-md border border-white/20 relative overflow-hidden">
             <span>{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
             <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
           </div>
@@ -95,7 +95,7 @@ export default function UserProfilePage() {
                   {[
                     { icon: 'person', label: 'Display Name', value: user.name },
                     { icon: 'mail', label: 'Email Address', value: user.email },
-                    { icon: 'phone', label: 'Contact Number', value: user.phone || 'No contact number added' },
+                    { icon: 'phone', label: 'Contact Number', value: user.contact || user.phone || 'No contact number added' },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center gap-4 px-4 py-3.5 bg-white/40 border border-gray-150 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
                       <span className="material-icon text-lg text-[#ff6b35]">{item.icon}</span>

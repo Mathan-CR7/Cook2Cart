@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect } from 'react';
-import { authService, videoCatalogService } from '../utils/api';
+import { authService, videoCatalogService, recipeCatalogService } from '../utils/api';
 
 const AppContext = createContext();
 
@@ -61,13 +61,27 @@ function appReducer(state, action) {
 
     case 'FINISH_AI_PROCESSING': {
       const isObject = action.payload && !Array.isArray(action.payload);
-      const ingredients = isObject ? action.payload.ingredients : action.payload;
+      const rawIngredients = isObject ? action.payload.ingredients : action.payload;
       const instructions = isObject ? (action.payload.instructions || []) : [];
+      
+      // Deduplicate extracted ingredients
+      const uniqueIngredients = [];
+      const seenNames = new Set();
+      if (Array.isArray(rawIngredients)) {
+        for (const ing of rawIngredients) {
+          const name = (ing.name || ing.ingredientName || '').trim().toLowerCase();
+          if (name && !seenNames.has(name)) {
+            seenNames.add(name);
+            uniqueIngredients.push(ing);
+          }
+        }
+      }
+
       return {
         ...state,
         aiProcessing: false,
         aiStep: 5,
-        extractedIngredients: ingredients || [],
+        extractedIngredients: uniqueIngredients,
         extractedInstructions: instructions || [],
       };
     }
@@ -87,11 +101,20 @@ function appReducer(state, action) {
         extractedIngredients: state.extractedIngredients.filter((_, i) => i !== action.payload),
       };
 
-    case 'ADD_INGREDIENT':
+    case 'ADD_INGREDIENT': {
+      const newIng = action.payload;
+      const normalizedName = (newIng.name || '').trim().toLowerCase();
+      const exists = state.extractedIngredients.some(
+        (ing) => (ing.name || '').trim().toLowerCase() === normalizedName
+      );
+      if (exists) {
+        return state;
+      }
       return {
         ...state,
-        extractedIngredients: [...state.extractedIngredients, action.payload],
+        extractedIngredients: [...state.extractedIngredients, newIng],
       };
+    }
 
     case 'UPDATE_INSTRUCTION': {
       const instructions = [...state.extractedInstructions];
@@ -113,29 +136,53 @@ function appReducer(state, action) {
 
     case 'SET_CART': {
       const payload = action.payload;
+      let itemsList = [];
+      let isObjectFormat = false;
+
       if (payload && payload.items) {
-        const newItems = payload.items.map((newItem) => {
-          const existingItem = state.cart.find(
-            (item) => item.ingredientName === newItem.ingredientName
-          );
-          return {
-            ...newItem,
-            qty: existingItem ? (existingItem.qty || 1) : 1,
-          };
-        });
+        itemsList = payload.items;
+        isObjectFormat = true;
+      } else if (Array.isArray(payload)) {
+        itemsList = payload;
+      }
+
+      // Map quantities and preserve existing qty
+      const mappedItems = itemsList.map((newItem) => {
+        const existingItem = state.cart.find(
+          (item) => item.ingredientName === newItem.ingredientName
+        );
+        return {
+          ...newItem,
+          qty: existingItem ? (existingItem.qty || 1) : 1,
+        };
+      });
+
+      // Deduplicate items
+      const uniqueItems = [];
+      const seenCartNames = new Set();
+      for (const item of mappedItems) {
+        const name = (item.ingredientName || item.name || '').trim().toLowerCase();
+        if (name && !seenCartNames.has(name)) {
+          seenCartNames.add(name);
+          uniqueItems.push(item);
+        }
+      }
+
+      if (isObjectFormat) {
         return {
           ...state,
-          cart: newItems,
+          cart: uniqueItems,
           cartObject: {
             ...payload,
-            items: newItems,
+            items: uniqueItems,
           },
         };
       }
+
       return {
         ...state,
-        cart: payload || [],
-        cartObject: payload ? { items: payload, originalServings: 4, targetServings: 4, totalPrice: 0 } : null,
+        cart: uniqueItems,
+        cartObject: payload ? { items: uniqueItems, originalServings: 4, targetServings: 4, totalPrice: 0 } : null,
       };
     }
 
@@ -251,31 +298,45 @@ function appReducer(state, action) {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
-  const mapVideoActionToRecipe = (action) => ({
-    id: action.video?.youtubeVideoId || action.video?.id || action.id,
-    videoId: action.video?.youtubeVideoId,
-    dbVideoId: action.video?.id,
-    title: action.video?.title || 'Recipe video',
-    channelTitle: action.video?.channelName || 'Cook2Cart',
-    thumbnailUrl: action.video?.thumbnailUrl,
-    videoUrl: action.video?.videoUrl,
-    duration: action.video?.duration,
-    savedAt: action.createdAt,
-    watchedAt: action.createdAt,
-    ingredients: [],
-    instructions: [],
-  });
-
   const hydrateVideoActions = async (userId) => {
-    const [history, saved, favorites] = await Promise.all([
+    const [history, saved, favorites, recipesResponse] = await Promise.all([
       videoCatalogService.getUserActions(userId, 'HISTORY'),
       videoCatalogService.getUserActions(userId, 'SAVED'),
       videoCatalogService.getUserActions(userId, 'FAVORITE'),
+      recipeCatalogService.getRecipesByUser(userId).catch(() => ({ data: [] })),
     ]);
 
-    dispatch({ type: 'SET_RECENT_RECIPES', payload: history.data.map(mapVideoActionToRecipe) });
-    dispatch({ type: 'SET_SAVED_RECIPES', payload: saved.data.map(mapVideoActionToRecipe) });
-    dispatch({ type: 'SET_FAVORITE_RECIPES', payload: favorites.data.map(mapVideoActionToRecipe) });
+    const recipes = recipesResponse?.data || [];
+
+    const mapAction = (action) => {
+      const dbVideoId = action.video?.id;
+      const matchingRecipe = recipes.find(r => r.videoId === dbVideoId);
+      
+      return {
+        id: action.video?.youtubeVideoId || action.video?.id || action.id,
+        videoId: action.video?.youtubeVideoId,
+        dbVideoId: dbVideoId,
+        title: action.video?.title || 'Recipe video',
+        channelTitle: action.video?.channelName || 'Cook2Cart',
+        thumbnailUrl: action.video?.thumbnailUrl,
+        videoUrl: action.video?.videoUrl,
+        duration: action.video?.duration,
+        savedAt: action.createdAt,
+        watchedAt: action.createdAt,
+        ingredients: matchingRecipe ? matchingRecipe.ingredients.map(ing => ({
+          name: ing.ingredientName || ing.name,
+          recipeQuantity: ing.recipeQuantity,
+          recipeUnit: ing.recipeUnit,
+          quantity: ing.quantity,
+          unit: ing.unit,
+        })) : [],
+        instructions: matchingRecipe ? matchingRecipe.instructions.map(inst => inst.instruction || inst.text || inst) : [],
+      };
+    };
+
+    dispatch({ type: 'SET_RECENT_RECIPES', payload: history.data.map(mapAction) });
+    dispatch({ type: 'SET_SAVED_RECIPES', payload: saved.data.map(mapAction) });
+    dispatch({ type: 'SET_FAVORITE_RECIPES', payload: favorites.data.map(mapAction) });
   };
 
   useEffect(() => {

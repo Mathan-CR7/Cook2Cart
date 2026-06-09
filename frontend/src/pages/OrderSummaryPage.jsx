@@ -13,7 +13,7 @@ export default function OrderSummaryPage() {
   const { state, dispatch } = useApp();
   const [confirmed, setConfirmed] = useState(false);
 
-  const cart = state.cart || [];
+  const cart = (state.cart || []).filter(item => !item.availableAtHome);
   const address = state.selectedAddress;
   const total = cart.reduce((sum, item) => sum + (item.price || 0) * (item.qty || 1), 0);
 

@@ -28,6 +28,11 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public Cart initializeCart(List<Ingredient> ingredients, int servings) {
+        return initializeCart(ingredients, servings, null);
+    }
+
+    @Override
+    public Cart initializeCart(List<Ingredient> ingredients, int servings, String recipeName) {
         List<Ingredient> processedIngredients = ingredients;
         if (ingredients != null && !ingredients.isEmpty()) {
             try {
@@ -229,6 +234,7 @@ public class CartServiceImpl implements CartService {
                         false,
                         recs
                 );
+                item.setRecipeName(recipeName);
                 items.add(item);
             }
         }

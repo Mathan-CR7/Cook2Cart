@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../context/AppContext';
+import LogoIcon from './LogoIcon';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home', icon: 'home' },
@@ -54,20 +55,9 @@ export default function AppBar() {
               <motion.div
                 whileHover={{ scale: 1.08, rotate: 5 }}
                 whileTap={{ scale: 0.95 }}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-black text-lg relative overflow-hidden"
-                style={{
-                  background: 'linear-gradient(135deg, #ff6b35, #ff4f11)',
-                  boxShadow: '0 4px 15px rgba(255, 107, 53, 0.25)',
-                  transition: 'all 0.3s cubic-bezier(0.23,1,0.32,1)',
-                }}
+                className="w-10 h-10 flex items-center justify-center relative"
               >
-                <span style={{ position: 'relative', zIndex: 1 }}>C</span>
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.25), transparent)',
-                  opacity: 0,
-                  transition: 'opacity 0.3s',
-                }} className="group-hover:opacity-100" />
+                <LogoIcon className="w-10 h-10" />
               </motion.div>
               <span
                 className="font-display font-black text-xl tracking-tight text-[#1e2229]"
@@ -110,7 +100,7 @@ export default function AppBar() {
                       to="/profile"
                       className="flex items-center gap-2.5 transition-all"
                     >
-                      <div className="w-7 h-7 rounded-lg gradient-bg flex items-center justify-center text-white text-xs font-bold font-display shadow-[0_2px_8px_rgba(255,107,53,0.2)]">
+                      <div className="w-7 h-7 rounded-full bg-black flex items-center justify-center text-white text-xs font-bold font-display shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
                         {state.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                       </div>
                       <span className="text-sm font-semibold text-[#5a6270] hover:text-[#ff6b35] transition-colors truncate">{state.user?.name}</span>
@@ -143,7 +133,7 @@ export default function AppBar() {
               {state.isAuthenticated && (
                 <Link
                   to="/profile"
-                  className="w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white text-sm font-bold font-display"
+                  className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white text-sm font-bold font-display shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
                 >
                   {state.user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </Link>

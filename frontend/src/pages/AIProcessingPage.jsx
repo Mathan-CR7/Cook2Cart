@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import PremiumBackground from '../components/PremiumBackground';
-import api, { videoService, aiService } from '../utils/api';
+import api, { videoService, aiService, videoCatalogService } from '../utils/api';
 import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
 const STEPS = [
@@ -60,7 +60,7 @@ export default function AIProcessingPage() {
   const navigate = useNavigate();
   const { videoId } = useParams();
   const locationState = useLocation().state;
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const [currentStep, setCurrentStep] = useState(-1);
   const [progress, setProgress] = useState(0);
   const [statusMsg, setStatusMsg] = useState('Initializing AI transcription processing pipeline...');
@@ -86,6 +86,75 @@ export default function AIProcessingPage() {
       });
 
       try {
+        // Attempt to check if video description contains ingredients first
+        try {
+          if (!active) return;
+          setStatusMsg('Checking video description for ingredients...');
+          const descResponse = await aiService.extractDescription(videoId);
+          if (descResponse.data && descResponse.data.ingredients && descResponse.data.ingredients.length > 0) {
+            setStatusMsg('Successfully extracted ingredients from YouTube description directly. Skipping audio download!');
+            setProgress(100);
+            setCurrentStep(4);
+            dispatch({ type: 'SET_AI_STEP', payload: 4 });
+            
+            let instructions = descResponse.data.instructions;
+            if (!instructions || instructions.length === 0) {
+              let detectedLang = 'en';
+              const titleLower = videoTitle.toLowerCase();
+              if (titleLower.includes('tamil') || /[\u0b80-\u0bff]/.test(videoTitle)) {
+                detectedLang = 'ta';
+              } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
+                detectedLang = 'hi';
+              }
+              instructions = 
+                detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
+                detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
+                SAMPLE_INSTRUCTIONS_EN;
+            }
+
+            dispatch({ 
+              type: 'FINISH_AI_PROCESSING', 
+              payload: {
+                ingredients: descResponse.data.ingredients,
+                instructions: instructions
+              }
+            });
+
+            // Save processed video to history catalog
+            try {
+              await videoCatalogService.saveProcessedVideo({
+                userId: state.user?.id || 1,
+                videoId: videoId,
+                title: videoTitle,
+                thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+                youtubeUrl: youtubeUrl,
+                ingredients: descResponse.data.ingredients.map(ing => ({
+                  name: ing.name,
+                  recipeQuantity: ing.recipeQuantity,
+                  recipeUnit: ing.recipeUnit,
+                  quantity: ing.quantity,
+                  unit: ing.unit,
+                  estimated: ing.estimated,
+                  source: ing.source,
+                  confidence: ing.confidence
+                })),
+                instructions: instructions,
+                confidenceScore: descResponse.data.confidenceScore || 1.0,
+                aiRecipeResponseId: descResponse.data.id
+              });
+            } catch (catalogErr) {
+              console.error('Failed to save to catalog:', catalogErr);
+            }
+
+            setTimeout(() => {
+              if (active) navigate(`/review/${videoId}`);
+            }, 1000);
+            return;
+          }
+        } catch (descErr) {
+          console.log('No recipe found in YouTube description. Falling back to video/audio download...', descErr);
+        }
+
         // Step 1: Downloading Video & Step 2: Extracting Audio
         if (!active) return;
         setCurrentStep(0);

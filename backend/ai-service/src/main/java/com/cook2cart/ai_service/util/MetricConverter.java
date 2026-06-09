@@ -8,20 +8,27 @@ public class MetricConverter {
     
     private static final Map<String, String> TRANSLATION_MAP = new HashMap<>();
     static {
-        TRANSLATION_MAP.put("mirchi", "green chilli");
-        TRANSLATION_MAP.put("hari mirch", "green chilli");
+        TRANSLATION_MAP.put("mirchi", "green chili");
+        TRANSLATION_MAP.put("hari mirch", "green chili");
+        TRANSLATION_MAP.put("green chilli", "green chili");
+        TRANSLATION_MAP.put("green chili", "green chili");
+        TRANSLATION_MAP.put("pachai milagai", "green chili");
+        TRANSLATION_MAP.put("pacha mirapakaya", "green chili");
+        TRANSLATION_MAP.put("pachimirchi", "green chili");
+        TRANSLATION_MAP.put("hasi menasinakai", "green chili");
+        TRANSLATION_MAP.put("pacha mulaku", "green chili");
+        TRANSLATION_MAP.put("chile verde", "green chili");
+        TRANSLATION_MAP.put("pimiento verde", "green chili");
+        TRANSLATION_MAP.put("piment vert", "green chili");
+        TRANSLATION_MAP.put("grüne chili", "green chili");
+        TRANSLATION_MAP.put("peperoncino verde", "green chili");
         TRANSLATION_MAP.put("hara dhania", "coriander");
         TRANSLATION_MAP.put("dhaniya", "coriander");
-        TRANSLATION_MAP.put("pachai milagai", "green chilli");
-        TRANSLATION_MAP.put("pacha mirapakaya", "green chilli");
-        TRANSLATION_MAP.put("pachimirchi", "green chilli");
-        TRANSLATION_MAP.put("hasi menasinakai", "green chilli");
-        TRANSLATION_MAP.put("pacha mulaku", "green chilli");
-        TRANSLATION_MAP.put("chile verde", "green chilli");
-        TRANSLATION_MAP.put("pimiento verde", "green chilli");
-        TRANSLATION_MAP.put("piment vert", "green chilli");
-        TRANSLATION_MAP.put("grüne chili", "green chilli");
-        TRANSLATION_MAP.put("peperoncino verde", "green chilli");
+        TRANSLATION_MAP.put("pudina", "mint leaves");
+        TRANSLATION_MAP.put("mint leaves", "mint leaves");
+        TRANSLATION_MAP.put("mint", "mint leaves");
+        TRANSLATION_MAP.put("ginger garlic paste", "ginger garlic paste");
+        TRANSLATION_MAP.put("ginger-garlic paste", "ginger garlic paste");
 
         TRANSLATION_MAP.put("pyaz", "onion");
         TRANSLATION_MAP.put("vengayam", "onion");

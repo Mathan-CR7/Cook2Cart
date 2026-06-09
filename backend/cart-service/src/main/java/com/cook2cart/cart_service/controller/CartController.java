@@ -23,12 +23,17 @@ public class CartController {
 
     @PostMapping("/initialize")
     public ResponseEntity<Cart> initializeCart(@RequestBody List<Ingredient> ingredients,
-                                               @RequestParam(value = "servings", defaultValue = "4") int servings) {
-        Cart cart = cartService.initializeCart(ingredients, servings);
+                                               @RequestParam(value = "servings", defaultValue = "4") int servings,
+                                               @RequestParam(value = "recipeName", required = false) String recipeName) {
+        Cart cart = cartService.initializeCart(ingredients, servings, recipeName);
         if (cart != null) {
             cart = cartRepository.save(cart);
         }
         return ResponseEntity.ok(cart);
+    }
+
+    public ResponseEntity<Cart> initializeCart(List<Ingredient> ingredients, int servings) {
+        return initializeCart(ingredients, servings, null);
     }
 
     @PostMapping("/scale")

@@ -51,13 +51,35 @@ public class RecipeController {
             }
         }
         
-        RecipeResponse response = recipeService.processRecipeAudio(file);
+        RecipeResponse response = recipeService.processRecipeAudio(file, videoId);
         if (response != null) {
             AiRecipeResponse saved = recipeRepository.save(toAuditEntity(response));
             response.setId(saved.getId());
             recipeCacheService.cacheRecipe(videoId, response);
         }
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/extract-description", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<RecipeResponse> extractFromDescription(@RequestParam("videoId") String videoId) {
+        log.info("Request to extract ingredients directly from video description. videoId: {}", videoId);
+
+        if (videoId != null && !videoId.isBlank()) {
+            var cachedRecipe = recipeCacheService.getRecipe(videoId);
+            if (cachedRecipe.isPresent()) {
+                log.info("Returning cached recipe response for videoId: {}", videoId);
+                return ResponseEntity.ok(cachedRecipe.get());
+            }
+        }
+
+        RecipeResponse response = recipeService.extractFromDescription(videoId);
+        if (response != null && response.getIngredients() != null && !response.getIngredients().isEmpty()) {
+            AiRecipeResponse saved = recipeRepository.save(toAuditEntity(response));
+            response.setId(saved.getId());
+            recipeCacheService.cacheRecipe(videoId, response);
+            return ResponseEntity.ok(response);
+        }
+        return ResponseEntity.notFound().build();
     }
 
     public ResponseEntity<RecipeResponse> processRecipeAudio(MultipartFile file) {

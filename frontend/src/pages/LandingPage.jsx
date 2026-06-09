@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppBar from '../components/AppBar';
+import LogoIcon from '../components/LogoIcon';
 import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
-import { videoService } from '../utils/api';
+import { videoService, aiService } from '../utils/api';
 import { useApp } from '../context/AppContext';
 import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
@@ -37,7 +38,6 @@ export default function LandingPage() {
   const { state } = useApp();
   const [url, setUrl] = useState('');
   const [processing, setProcessing] = useState(false);
-  const [downloadedVideo, setDownloadedVideo] = useState(null);
   const [error, setError] = useState('');
 
   // Live simulation loop states
@@ -82,7 +82,6 @@ export default function LandingPage() {
     }
 
     setProcessing(true);
-    setDownloadedVideo(null);
 
     // Fetch video title from oEmbed API
     let videoTitle = 'My Recipe';
@@ -98,41 +97,25 @@ export default function LandingPage() {
       console.warn('Could not fetch video title, using default:', titleErr);
     }
 
-    try {
-      await videoService.process(url);
-      setDownloadedVideo({
-        videoId,
-        title: videoTitle,
-        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-        url,
+    setProcessing(false);
+
+    if (!state.isAuthenticated) {
+      navigate(`/login?redirect=/process/${videoId}`);
+    } else {
+      navigate(`/process/${videoId}`, {
+        state: {
+          videoId,
+          title: videoTitle,
+          thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          url,
+        },
       });
-    } catch (err) {
-      setError('Failed to process video. Make sure the backend is running.');
-    } finally {
-      setProcessing(false);
     }
   };
 
   const handleQuickTry = (recipeUrl) => {
     setUrl(recipeUrl);
     setError('');
-    setDownloadedVideo(null);
-  };
-
-  const handleExtract = () => {
-    if (!downloadedVideo) return;
-    if (!state.isAuthenticated) {
-      navigate(`/login?redirect=/process/${downloadedVideo.videoId}`);
-    } else {
-      navigate(`/process/${downloadedVideo.videoId}`, {
-        state: {
-          videoId: downloadedVideo.videoId,
-          title: downloadedVideo.title || 'YouTube Recipe',
-          channelTitle: 'YouTube',
-          thumbnailUrl: downloadedVideo.thumbnailUrl,
-        },
-      });
-    }
   };
 
   return (
@@ -194,10 +177,10 @@ export default function LandingPage() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            whileHover={{ scale: 1.05, boxShadow: '0 8px 30px rgba(255, 107, 53, 0.2)' }}
-            className="inline-flex items-center justify-center w-16 h-16 rounded-3xl gradient-bg mb-8 shadow-[0_10px_25px_rgba(255,107,53,0.25)] cursor-pointer border border-white/20"
+            whileHover={{ scale: 1.05 }}
+            className="inline-flex items-center justify-center w-20 h-20 mb-8 cursor-pointer"
           >
-            <span className="material-icon text-white text-3xl fill">restaurant</span>
+            <LogoIcon className="w-18 h-18" />
           </motion.div>
 
           {/* Heading */}
@@ -250,7 +233,7 @@ export default function LandingPage() {
                   <input
                     type="url"
                     value={url}
-                    onChange={(e) => { setUrl(e.target.value); setError(''); setDownloadedVideo(null); }}
+                    onChange={(e) => { setUrl(e.target.value); setError(''); }}
                     className="w-full bg-transparent pl-12 pr-4 py-3.5 rounded-xl text-base text-[#1e2229] placeholder-gray-400 focus:outline-none"
                     placeholder="Paste YouTube recipe URL here..."
                     disabled={processing}
@@ -320,41 +303,8 @@ export default function LandingPage() {
               )}
             </AnimatePresence>
 
-            {/* Video preview card */}
-            <AnimatePresence>
-              {downloadedVideo && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 15 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                  className="mt-6 glass gradient-border-brand p-5 rounded-2xl flex flex-col sm:flex-row items-center gap-4 text-left shadow-lg"
-                >
-                  <img
-                    src={downloadedVideo.thumbnailUrl}
-                    alt="Video thumbnail"
-                    className="w-32 h-20 rounded-xl object-cover border border-white/20"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
-                      <span className="text-[#10b981] text-xs font-black uppercase tracking-wider font-display">Ready for extraction</span>
-                    </div>
-                    <h4 className="text-[#1e2229] font-extrabold text-sm truncate">{downloadedVideo.title}</h4>
-                    <p className="text-gray-400 text-xs truncate mt-0.5">{downloadedVideo.url}</p>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={handleExtract}
-                    className="w-full sm:w-auto gradient-bg text-white px-6 py-3 rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_4px_12px_rgba(255,107,53,0.25)] flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span className="material-icon text-base fill !text-white">auto_awesome</span>
-                    <span>Extract Ingredients</span>
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Video preview card placeholder */}
+            <AnimatePresence></AnimatePresence>
           </motion.div>
 
           {/* Side-by-Side YouTube Video & Cart Showcase (Only visible on mobile/tablet < lg) */}
@@ -670,7 +620,7 @@ export default function LandingPage() {
                 <span className="material-icon text-[#ff6b35]">shopping_bag</span>
               </div>
               <h3 className="font-display font-bold text-lg text-[#1e2229] mb-2 font-display">Checkout Delivery</h3>
-              <p className="text-gray-400 text-xs leading-relaxed">Review the structured grocery checklist, edit details, and dispatch items to your door.</p>
+              <p className="text-gray-400 text-xs leading-relaxed">Review the structured grocery checklist and preview checkout options like Blinkit, Instamart, and Zepto.</p>
             </div>
 
           </div>
@@ -722,8 +672,8 @@ export default function LandingPage() {
             {[
               { q: 'How does the AI identify ingredients?', a: 'Our system analyzes cooking transcripts and details using machine learning to parse structured items and isolate kitchen measurements.' },
               { q: 'Can I custom-edit ingredients?', a: 'Absolutely. On the review page, you can scale quantities, swap active items, edit brand names, or manually add missing products.' },
-              { q: 'Is there a cost for the service?', a: 'Analyzing and structuring recipes is free. You only pay for grocery delivery if you checkout with one of our integrated retail networks.' },
-              { q: 'What delivery options are available?', a: 'We link automatically to local delivery networks so you can dispatch items straight to your address, or generate checklists to print out.' },
+              { q: 'Is there a cost for the service?', a: 'Analyzing and structuring recipes is free. Platform checkout options are currently frontend previews, not live third-party orders.' },
+              { q: 'What delivery options are available?', a: 'The frontend shows Blinkit, Instamart, and Zepto as checkout choices. Backend API calls to those platforms are future scope.' },
             ].map((faq, i) => (
               <details key={i} className="group glass rounded-2xl overflow-hidden hover:border-[#ff6b35]/20 transition-all">
                 <summary className="w-full px-6 py-5 flex items-center justify-between text-left cursor-pointer list-none select-none">
@@ -758,7 +708,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-4 gap-10">
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-display font-black text-lg gradient-bg">🍳</div>
+                <LogoIcon className="w-9 h-9" />
                 <span className="font-display font-bold text-lg text-[#1e2229] tracking-tight">Cook2Cart</span>
               </div>
               <p className="text-xs leading-relaxed text-gray-500 font-display">Turn cooking video recipes into local grocery checkouts instantly. Built with light premium aesthetics.</p>

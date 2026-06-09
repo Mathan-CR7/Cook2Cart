@@ -71,6 +71,9 @@ export const aiService = {
     params: videoId ? { videoId } : undefined,
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  extractDescription: (videoId) => api.post('/api/ai/recipe/extract-description', null, {
+    params: { videoId }
+  }),
 };
 
 export const recipeCatalogService = {
@@ -79,7 +82,7 @@ export const recipeCatalogService = {
 };
 
 export const cartService = {
-  initialize: (ingredients, servings) => api.post('/api/cart/initialize', ingredients, { params: { servings } }),
+  initialize: (ingredients, servings, recipeName) => api.post('/api/cart/initialize', ingredients, { params: { servings, recipeName } }),
   scale: (cart, targetServings) => api.post('/api/cart/scale', cart, { params: { targetServings } }),
   updateItem: (cart, index, params) => api.put(`/api/cart/items/${index}`, cart, { params }),
   removeItem: (cart, index) => api.delete(`/api/cart/items/${index}`, { data: cart }),

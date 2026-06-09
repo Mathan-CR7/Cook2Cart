@@ -7,6 +7,8 @@ import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
 import FAB from '../components/FAB';
 import { cartService } from '../utils/api';
+import { formatQty, formatUnit } from '../utils/quantityFormatter';
+import { getEstimatedNutrition, getIngredientNutrition, getDisplayQuantityWithConversion } from '../utils/nutritionEstimator';
 
 const BUDGET_OPTIONS = [500, 1000, 1500, 2000];
 const HEALTH_FILTERS = ['Diabetic', 'High Protein', 'Weight Loss', 'High BP'];
@@ -16,8 +18,68 @@ export default function SmartCartPage() {
   const { videoId } = useParams();
   const { state, dispatch } = useApp();
   const [showIngredientsModal, setShowIngredientsModal] = useState(false);
+  const [expandedBuckets, setExpandedBuckets] = useState({});
+
+  const toggleBucket = (recipeName) => {
+    setExpandedBuckets(prev => ({
+      ...prev,
+      [recipeName]: !prev[recipeName]
+    }));
+  };
+
   const cart = state.cart || [];
   const total = cart.reduce((sum, item) => sum + (item.availableAtHome ? 0 : (item.price || 0) * (item.qty || 1)), 0);
+
+  // Group cart items by recipeName
+  const groupedItems = cart.reduce((groups, item) => {
+    const recipeName = item.recipeName || state.selectedRecipe?.title || 'Other Items';
+    if (!groups[recipeName]) {
+      groups[recipeName] = [];
+    }
+    groups[recipeName].push(item);
+    return groups;
+  }, {});
+
+  const calculateTotalNutrition = (items) => {
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    const vitaminsSet = new Set();
+    
+    items.forEach(item => {
+      const rawQty = item.recipeQuantity ?? item.quantity ?? 1;
+      const rawUnit = item.recipeUnit || item.unit || 'pcs';
+      const qty = formatQty(rawQty);
+      const unit = formatUnit(rawUnit, qty);
+      const ingName = item.originalName || item.name || item.selectedProduct?.name || '';
+      
+      const nutrition = getIngredientNutrition(ingName, qty, unit);
+      totalCalories += nutrition.calories;
+      totalProtein += nutrition.protein;
+      totalCarbs += nutrition.carbohydrates;
+      totalFat += nutrition.fat;
+      
+      if (nutrition.vitamins) {
+        nutrition.vitamins.split(',').forEach(v => {
+          const cleanV = v.trim();
+          if (cleanV) vitaminsSet.add(cleanV);
+        });
+      }
+    });
+    
+    const vitaminsList = vitaminsSet.size > 0 
+      ? Array.from(vitaminsSet).slice(0, 4).join(', ')
+      : 'Minerals';
+    
+    return {
+      calories: `${totalCalories} kcal`,
+      protein: `${totalProtein.toFixed(1)}g`,
+      carbohydrates: `${totalCarbs.toFixed(1)}g`,
+      fat: `${totalFat.toFixed(1)}g`,
+      vitamins: vitaminsList
+    };
+  };
 
   const handleUpdate = (index, data) => dispatch({ type: 'UPDATE_CART_ITEM', payload: { index, data } });
 
@@ -148,87 +210,9 @@ export default function SmartCartPage() {
           </div>
         </div>
 
-        {/* Budget & Dietary filter blocks */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          
-          {/* Budget block */}
-          <div className="glass p-5 rounded-2xl border border-white/60 flex flex-col justify-between shadow-sm">
-            <div>
-              <h3 className="font-display font-bold text-sm text-[#1e2229] flex items-center gap-2 mb-1.5">
-                <span className="material-icon text-base text-[#ff6b35]">sell</span>
-                <span>Budget Optimization</span>
-              </h3>
-              <p className="text-xs text-gray-500 mb-3.5 font-display">Automatically swap product brands to fit your spending target.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {BUDGET_OPTIONS.map(limit => {
-                const isActive = state.budgetMode && state.budgetLimit === limit;
-                return (
-                  <button 
-                    key={limit} 
-                    onClick={() => { dispatch({ type: 'SET_BUDGET_MODE', payload: true }); dispatch({ type: 'SET_BUDGET_LIMIT', payload: limit }); }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold font-display border transition-all duration-300 ${
-                      isActive 
-                        ? 'gradient-bg text-white border-transparent shadow-[0_4px_12px_rgba(255,107,53,0.2)]' 
-                        : 'bg-white/60 text-gray-500 border-gray-200 hover:border-[#ff6b35]/30 hover:bg-white'
-                    }`}
-                  >
-                    Under ₹{limit}
-                  </button>
-                );
-              })}
-              {state.budgetMode && (
-                <button 
-                  onClick={() => dispatch({ type: 'SET_BUDGET_MODE', payload: false })} 
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold font-display border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Dietary block */}
-          <div className="glass p-5 rounded-2xl border border-white/60 flex flex-col justify-between shadow-sm">
-            <div>
-              <h3 className="font-display font-bold text-sm text-[#1e2229] flex items-center gap-2 mb-1.5">
-                <span className="material-icon text-base text-[#ff6b35]">favorite</span>
-                <span>Dietary Health Mode</span>
-              </h3>
-              <p className="text-xs text-gray-500 mb-3.5 font-display">Filter grocery brands matching your health requirements.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {HEALTH_FILTERS.map(f => {
-                const isActive = state.healthMode && state.healthFilter === f;
-                return (
-                  <button 
-                    key={f} 
-                    onClick={() => { dispatch({ type: 'SET_HEALTH_MODE', payload: true }); dispatch({ type: 'SET_HEALTH_FILTER', payload: f }); }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold font-display border transition-all duration-300 ${
-                      isActive 
-                        ? 'gradient-bg text-white border-transparent shadow-[0_4px_12px_rgba(255,107,53,0.2)]' 
-                        : 'bg-white/60 text-gray-500 border-gray-200 hover:border-[#ff6b35]/30 hover:bg-white'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                );
-              })}
-              {state.healthMode && (
-                <button 
-                  onClick={() => dispatch({ type: 'SET_HEALTH_MODE', payload: false })} 
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold font-display border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </div>
-
-        </div>
 
         {/* Cart Item Checklist */}
-        <div className="flex flex-col gap-3.5 mb-10">
+        <div className="flex flex-col gap-6 mb-10">
           <AnimatePresence initial={false}>
             {cart.length === 0 ? (
               <motion.div 
@@ -250,136 +234,259 @@ export default function SmartCartPage() {
                 </motion.button>
               </motion.div>
             ) : (
-              cart.map((item, i) => {
-                const displayName = item.selectedProduct?.name || item.originalName || item.name;
-                const displayPrice = item.availableAtHome ? 0 : (item.price || 0);
-
+              Object.entries(groupedItems).map(([recipeName, items]) => {
+                const recipeThumbnail = items.find(item => item.recipeThumbnail)?.recipeThumbnail || state.selectedRecipe?.thumbnailUrl;
+                const isExpanded = !!expandedBuckets[recipeName];
                 return (
-                  <motion.div 
-                    key={displayName + "_" + i}
-                    layout
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.25 }}
-                    className={`glass p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
-                      item.availableAtHome 
-                        ? 'border-gray-200/50 bg-gray-50/50 opacity-60' 
-                        : 'border-white/60 hover:border-[#ff6b35]/20 hover:bg-white'
-                    }`}
-                  >
-                    
-                    {/* Item Description */}
-                    <div className="flex items-start gap-4 flex-1 min-w-0">
-                      <div 
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border ${
-                          item.availableAtHome 
-                            ? 'bg-gray-100 text-gray-400 border-gray-200/50' 
-                            : 'bg-[#ff6b35]/5 text-[#ff6b35] border-[#ff6b35]/12'
-                        }`}
-                      >
-                        <span className="material-icon text-lg">restaurant</span>
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-display font-bold text-base text-[#1e2229] truncate leading-tight">{displayName}</h4>
-                          {item.availableAtHome && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20">
-                              At Home
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-xs text-gray-400 mt-1 font-display">
-                          Recipe call: <span className="font-semibold text-gray-500">{item.recipeQuantity} {item.recipeUnit}</span>
-                        </p>
-
-                        {/* Selectors dropdown */}
-                        <div className="flex items-center gap-2 mt-3 flex-wrap">
-                          {item.availableBrands && item.availableBrands.length > 0 && (
-                            <div className="relative">
-                              <select
-                                value={item.selectedBrand || ''}
-                                onChange={(e) => handleBrandChange(i, e.target.value)}
-                                className="bg-white border border-gray-200 text-gray-500 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#ff6b35] transition-colors cursor-pointer pr-6 appearance-none font-display font-bold"
-                              >
-                                {item.availableBrands.map((brand) => (
-                                  <option key={brand} value={brand}>{brand}</option>
-                                ))}
-                              </select>
-                              <span className="material-icon text-xs text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
-                            </div>
-                          )}
-
-                          {item.availableSizes && item.availableSizes.length > 0 && (
-                            <div className="relative">
-                              <select
-                                value={item.selectedSize || ''}
-                                onChange={(e) => handleSizeChange(i, e.target.value)}
-                                className="bg-white border border-gray-200 text-gray-500 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#ff6b35] transition-colors cursor-pointer pr-6 appearance-none font-display font-bold"
-                              >
-                                {item.availableSizes.map((size) => (
-                                  <option key={size} value={size}>{size}</option>
-                                ))}
-                              </select>
-                              <span className="material-icon text-xs text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="text-[#ff6b35] font-display font-black text-sm mt-3.5">
-                          {item.availableAtHome ? '₹0' : `₹${displayPrice * (item.qty || 1)}`}
+                  <div key={recipeName} className="mb-6 animate-fade-slide-up">
+                    {/* Recipe Bucket Header */}
+                    <div 
+                      onClick={() => toggleBucket(recipeName)}
+                      className="glass px-5 py-3.5 rounded-2xl border border-white/60 flex items-center justify-between gap-4 shadow-sm mb-4 bg-white/40 cursor-pointer hover:bg-white/60 hover:border-[#ff6b35]/20 transition-all duration-300 select-none"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {recipeThumbnail ? (
+                          <img 
+                            src={recipeThumbnail} 
+                            alt={recipeName}
+                            className="w-16 h-10 object-cover rounded-lg shadow-sm border border-gray-100 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-16 h-10 rounded-lg bg-[#ff6b35]/5 border border-[#ff6b35]/12 flex items-center justify-center text-[#ff6b35] flex-shrink-0">
+                            <span className="material-icon text-lg">restaurant</span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h3 className="font-display font-extrabold text-[#1e2229] text-base truncate">{recipeName}</h3>
+                          <span className="text-xs text-gray-400 font-medium font-display">{items.length} items detected</span>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Actions & counter */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3.5 border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-100">
                       
-                      <motion.button
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => handleToggleAvailableAtHome(i)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold font-display border transition-all duration-300 cursor-pointer ${
-                          item.availableAtHome 
-                            ? 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20 hover:bg-[#10b981]/20' 
-                            : 'bg-white text-gray-400 border-gray-200 hover:border-[#10b981]/30 hover:text-[#10b981]'
-                        }`}
-                      >
-                        {item.availableAtHome ? 'Buy List' : 'I Have This'}
-                      </motion.button>
-
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white">
-                          <button 
-                            onClick={() => handleUpdate(i, { qty: Math.max(1, (item.qty || 1) - 1) })} 
-                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#ff6b35] hover:bg-gray-50 transition-all text-base font-bold cursor-pointer"
+                      <div className="flex items-center gap-3">
+                        {state.selectedRecipe?.title && recipeName === state.selectedRecipe.title && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowIngredientsModal(true);
+                            }}
+                            className="text-xs font-bold text-[#ff6b35] hover:underline flex items-center gap-1 font-display"
                           >
-                            −
+                            <span className="material-icon text-xs">receipt_long</span>
+                            <span className="hidden sm:inline">View Recipe</span>
                           </button>
-                          <span className="w-6 h-8 flex items-center justify-center text-xs font-bold text-gray-700 font-display">{item.qty || 1}</span>
-                          <button 
-                            onClick={() => handleUpdate(i, { qty: (item.qty || 1) + 1 })} 
-                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#ff6b35] hover:bg-gray-50 transition-all text-base font-bold cursor-pointer"
-                          >
-                            +
-                          </button>
-                        </div>
-                        
-                        <motion.button 
-                          whileHover={{ scale: 1.1, color: '#ef4444' }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleRemove(i)} 
-                          className="p-2 text-gray-400 hover:bg-red-50 rounded-xl transition-all border border-transparent cursor-pointer"
-                        >
-                          <span className="material-icon text-lg">delete</span>
-                        </motion.button>
+                        )}
+                        <span className="material-icon text-gray-400 text-xl transition-transform duration-300" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                          expand_more
+                        </span>
                       </div>
-
                     </div>
 
-                  </motion.div>
+                    {/* Ingredients List */}
+                    {isExpanded && (
+                      <div className="flex flex-col gap-3.5 pl-0 sm:pl-4 border-l-0 sm:border-l sm:border-gray-100 sm:ml-8 animate-fade-slide-up">
+                        {recipeName !== 'Other Items' && (
+                          (() => {
+                            const nutrition = calculateTotalNutrition(items);
+                            return (
+                              <div className="glass p-5 rounded-2xl border border-emerald-500/15 bg-emerald-55/5 shadow-sm mb-2">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="material-icon text-emerald-600 text-lg">analytics</span>
+                                  <h4 className="font-display font-extrabold text-sm text-emerald-800">Estimated Nutritional Profile (Per Serving)</h4>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                  <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Calories</div>
+                                    <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.calories}</div>
+                                  </div>
+                                  <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Protein</div>
+                                    <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.protein}</div>
+                                  </div>
+                                  <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Carbs</div>
+                                    <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.carbohydrates}</div>
+                                  </div>
+                                  <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Fat</div>
+                                    <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.fat}</div>
+                                  </div>
+                                  <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center col-span-2 sm:col-span-1 flex flex-col justify-center">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Vitamins</div>
+                                    <div className="font-display font-extrabold text-[10px] text-emerald-600 mt-1 line-clamp-2 leading-tight">
+                                      {nutrition.vitamins}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                        {items.map((item) => {
+                          const i = cart.indexOf(item);
+                          const displayName = item.selectedProduct?.name || item.originalName || item.name;
+                          const displayPrice = item.availableAtHome ? 0 : (item.price || 0);
+
+                          return (
+                            <motion.div 
+                              key={displayName + "_" + i}
+                              layout
+                              initial={{ opacity: 0, y: 15 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ duration: 0.25 }}
+                              className={`glass p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
+                                item.availableAtHome 
+                                  ? 'border-gray-200/50 bg-gray-50/50 opacity-60' 
+                                  : 'border-white/60 hover:border-[#ff6b35]/20 hover:bg-white'
+                              }`}
+                            >
+                              
+                              {/* Item Description */}
+                              <div className="flex items-start gap-4 flex-1 min-w-0">
+                                <div 
+                                  className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 border ${
+                                    item.availableAtHome 
+                                      ? 'bg-gray-100 text-gray-400 border-gray-200/50' 
+                                      : 'bg-[#ff6b35]/5 text-[#ff6b35] border-[#ff6b35]/12'
+                                  }`}
+                                >
+                                  <span className="material-icon text-lg">restaurant</span>
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-display font-bold text-base text-[#1e2229] truncate leading-tight">{displayName}</h4>
+                                    {item.availableAtHome && (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20">
+                                        At Home
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p className="text-xs text-gray-400 mt-1 font-display">
+                                    Recipe call: <span className="font-semibold text-gray-500">{getDisplayQuantityWithConversion(item.originalName || item.name || '', formatQty(item.recipeQuantity), formatUnit(item.recipeUnit, item.recipeQuantity))}</span>
+                                  </p>
+
+                                  {/* Ingredient Nutrition Profile */}
+                                  {(() => {
+                                    const rawQty = item.recipeQuantity ?? item.quantity ?? 1;
+                                    const rawUnit = item.recipeUnit || item.unit || 'pcs';
+                                    const qty = formatQty(rawQty);
+                                    const unit = formatUnit(rawUnit, qty);
+                                    const ingName = item.originalName || item.name || item.selectedProduct?.name || '';
+                                    const ingNutrition = getIngredientNutrition(ingName, qty, unit);
+                                    return (
+                                      <p className="text-[10px] text-emerald-600 font-semibold mt-1 font-display flex items-center gap-2 flex-wrap">
+                                        <span className="inline-flex items-center gap-0.5">
+                                          <span className="material-icon text-[10px]">bolt</span>
+                                          <span>{ingNutrition.calories} kcal</span>
+                                        </span>
+                                        <span>•</span>
+                                        <span>P: {ingNutrition.protein}g</span>
+                                        <span>•</span>
+                                        <span>C: {ingNutrition.carbohydrates}g</span>
+                                        <span>•</span>
+                                        <span>F: {ingNutrition.fat}g</span>
+                                        {ingNutrition.vitamins && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="text-gray-400 text-[9px] font-medium">{ingNutrition.vitamins.split(',')[0]}</span>
+                                          </>
+                                        )}
+                                      </p>
+                                    );
+                                  })()}
+
+                                  {/* Selectors dropdown */}
+                                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                                    {item.availableBrands && item.availableBrands.length > 0 && (
+                                      <div className="relative">
+                                        <select
+                                          value={item.selectedBrand || ''}
+                                          onChange={(e) => handleBrandChange(i, e.target.value)}
+                                          className="bg-white border border-gray-200 text-gray-500 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#ff6b35] transition-colors cursor-pointer pr-6 appearance-none font-display font-bold"
+                                        >
+                                          {item.availableBrands.map((brand) => (
+                                            <option key={brand} value={brand}>{brand}</option>
+                                          ))}
+                                        </select>
+                                        <span className="material-icon text-xs text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
+                                      </div>
+                                    )}
+
+                                    {item.availableSizes && item.availableSizes.length > 0 && (
+                                      <div className="relative">
+                                        <select
+                                          value={item.selectedSize || ''}
+                                          onChange={(e) => handleSizeChange(i, e.target.value)}
+                                          className="bg-white border border-gray-200 text-gray-500 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#ff6b35] transition-colors cursor-pointer pr-6 appearance-none font-display font-bold"
+                                        >
+                                          {item.availableSizes.map((size) => (
+                                            <option key={size} value={size}>{size}</option>
+                                          ))}
+                                        </select>
+                                        <span className="material-icon text-xs text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="text-[#ff6b35] font-display font-black text-sm mt-3.5">
+                                    {item.availableAtHome ? '₹0' : `₹${displayPrice * (item.qty || 1)}`}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions & counter */}
+                              <div className="flex items-center justify-between sm:justify-end gap-3.5 border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-100">
+                                
+                                <motion.button
+                                  whileHover={{ scale: 1.03 }}
+                                  whileTap={{ scale: 0.97 }}
+                                  onClick={() => handleToggleAvailableAtHome(i)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold font-display border transition-all duration-300 cursor-pointer ${
+                                    item.availableAtHome 
+                                      ? 'bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20 hover:bg-[#10b981]/20' 
+                                      : 'bg-white text-gray-400 border-gray-200 hover:border-[#10b981]/30 hover:text-[#10b981]'
+                                  }`}
+                                >
+                                  {item.availableAtHome ? 'Buy List' : 'I Have This'}
+                                </motion.button>
+
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white">
+                                    <button 
+                                      onClick={() => handleUpdate(i, { qty: Math.max(1, (item.qty || 1) - 1) })} 
+                                      className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#ff6b35] hover:bg-gray-50 transition-all text-base font-bold cursor-pointer"
+                                    >
+                                      −
+                                    </button>
+                                    <span className="w-6 h-8 flex items-center justify-center text-xs font-bold text-gray-700 font-display">{item.qty || 1}</span>
+                                    <button 
+                                      onClick={() => handleUpdate(i, { qty: (item.qty || 1) + 1 })} 
+                                      className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#ff6b35] hover:bg-gray-50 transition-all text-base font-bold cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                  
+                                  <motion.button 
+                                    whileHover={{ scale: 1.1, color: '#ef4444' }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => handleRemove(i)} 
+                                    className="p-2 text-gray-400 hover:bg-red-50 rounded-xl transition-all border border-transparent cursor-pointer"
+                                  >
+                                    <span className="material-icon text-lg">delete</span>
+                                  </motion.button>
+                                </div>
+
+                              </div>
+
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })
             )}
@@ -446,7 +553,7 @@ export default function SmartCartPage() {
                   <div key={idx} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0 font-display">
                     <span className="text-gray-700 text-sm font-semibold">{ing.name}</span>
                     <span className="text-[#ff6b35] font-black text-sm">
-                      {ing.recipeQuantity || ing.quantity || ''} {ing.recipeUnit || ing.unit || 'pcs'}
+                      {getDisplayQuantityWithConversion(ing.name || '', formatQty(ing.recipeQuantity || ing.quantity || ''), formatUnit(ing.recipeUnit || ing.unit || 'pcs', ing.recipeQuantity || ing.quantity))}
                     </span>
                   </div>
                 ))

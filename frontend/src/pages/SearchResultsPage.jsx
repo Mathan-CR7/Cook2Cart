@@ -7,6 +7,35 @@ import PremiumBackground from '../components/PremiumBackground';
 import RecipeCard from '../components/RecipeCard';
 import { getApiErrorMessage, videoService } from '../utils/api';
 
+const FALLBACK_SEARCH_SUGGESTIONS = [
+  'mutton biryani',
+  'mutton curry',
+  'mutton gravy',
+  'mutton sukka',
+  'mutton chops',
+  'mutton keema',
+  'mutton soup',
+  'chicken biryani',
+  'chicken curry',
+  'paneer butter masala',
+  'dosa',
+  'pasta',
+  'healthy breakfast',
+  'egg recipe',
+  'egg biryani',
+  'egg curry',
+  'egg masala',
+];
+
+const getFallbackSuggestions = (prefix) => {
+  const normalizedPrefix = prefix.trim().toLowerCase();
+  if (normalizedPrefix.length < 2) return [];
+
+  return FALLBACK_SEARCH_SUGGESTIONS
+    .filter((suggestion) => suggestion.includes(normalizedPrefix))
+    .slice(0, 6);
+};
+
 export default function SearchResultsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -72,7 +101,9 @@ export default function SearchResultsPage() {
       videoService.suggestions(prefix)
         .then((res) => {
           if (cancelled) return;
-          const nextSuggestions = Array.isArray(res.data) ? res.data : [];
+          const apiSuggestions = Array.isArray(res.data) ? res.data : [];
+          const fallbackSuggestions = getFallbackSuggestions(prefix);
+          const nextSuggestions = [...new Set([...apiSuggestions, ...fallbackSuggestions])].slice(0, 8);
           setSuggestions(nextSuggestions);
           setShowSuggestions(nextSuggestions.length > 0);
           setActiveSuggestion(-1);
@@ -80,8 +111,9 @@ export default function SearchResultsPage() {
         .catch((err) => {
           if (cancelled) return;
           console.error('Failed to load search suggestions:', err);
-          setSuggestions([]);
-          setShowSuggestions(false);
+          const fallbackSuggestions = getFallbackSuggestions(prefix);
+          setSuggestions(fallbackSuggestions);
+          setShowSuggestions(fallbackSuggestions.length > 0);
         })
         .finally(() => {
           if (!cancelled) setSuggestionsLoading(false);
@@ -298,21 +330,6 @@ export default function SearchResultsPage() {
             </div>
           </form>
 
-          {/* Filter Chips */}
-          <div className="flex gap-2 overflow-x-auto py-4 no-scrollbar">
-            {['All Results', 'Under 20 mins', 'Vegetarian', 'Gluten-Free', 'High Protein'].map((chip) => (
-              <button
-                key={chip}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all ${
-                  chip === 'All Results'
-                    ? 'bg-orange-500 text-white border-orange-500'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300 hover:text-orange-600'
-                }`}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
 
           <p className="text-gray-500 text-sm">
             {isListening && 'Listening... speak your recipe search'}

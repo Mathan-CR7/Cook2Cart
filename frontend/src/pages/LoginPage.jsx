@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AppBar from '../components/AppBar';
 import BottomNav from '../components/BottomNav';
 import PremiumBackground from '../components/PremiumBackground';
+import LogoIcon from '../components/LogoIcon';
 import { authService } from '../utils/api';
 import { useApp } from '../context/AppContext';
 
@@ -12,7 +13,7 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const { dispatch } = useApp();
   const [isRegister, setIsRegister] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', contact: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +46,14 @@ export default function LoginPage() {
     try {
       let res;
       if (isRegister) {
-        await authService.register(form);
+        await authService.register({
+          name: `${form.firstName} ${form.lastName}`,
+          firstName: form.firstName,
+          lastName: form.lastName,
+          contact: form.contact,
+          email: form.email,
+          password: form.password
+        });
         res = await authService.login({ email: form.email, password: form.password });
       } else {
         res = await authService.login({ email: form.email, password: form.password });
@@ -81,9 +89,9 @@ export default function LoginPage() {
             <motion.div 
               animate={{ scale: [1, 1.05, 1], rotate: [0, 3, 0] }}
               transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
-              className="w-16 h-16 mx-auto bg-gradient-to-br from-[#ff6b35]/10 to-[#ff8e53]/10 border border-[#ff6b35]/20 rounded-2xl flex items-center justify-center mb-5 shadow-sm"
+              className="w-16 h-16 mx-auto flex items-center justify-center mb-5"
             >
-              <span className="text-3xl">🍳</span>
+              <LogoIcon className="w-14 h-14" />
             </motion.div>
             <motion.h1 layoutId="authTitle" className="font-display font-black text-2xl md:text-3xl text-[#1e2229]">
               {isRegister ? 'Create Account' : 'Welcome Back'}
@@ -112,26 +120,52 @@ export default function LoginPage() {
             <AnimatePresence initial={false}>
               {isRegister && (
                 <motion.div 
-                  initial={{ opacity: 0, height: 0, y: -10 }}
-                  animate={{ opacity: 1, height: 'auto', y: 0 }}
-                  exit={{ opacity: 0, height: 0, y: -10 }}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.25 }}
-                  className="relative flex items-center bg-white/40 rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all overflow-hidden"
+                  className="flex flex-col gap-4 overflow-hidden"
                 >
-                  <span className="material-icon text-gray-400 absolute left-4 text-lg">person</span>
-                  <input
-                    type="text"
-                    placeholder="Full Name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full bg-transparent pl-12 pr-4 py-3.5 text-sm text-[#1e2229] placeholder-gray-400 focus:outline-none"
-                    required
-                  />
+                  <div className="flex gap-4">
+                    <div className="flex-1 relative flex items-center bg-white rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all overflow-hidden">
+                      <span className="material-icon text-gray-400 absolute left-4 text-lg">person</span>
+                      <input
+                        type="text"
+                        placeholder="First Name"
+                        value={form.firstName}
+                        onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                        className="w-full bg-transparent pl-12 pr-4 py-3.5 text-sm text-[#1e2229] placeholder-gray-400 focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <div className="flex-1 relative flex items-center bg-white rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all overflow-hidden">
+                      <span className="material-icon text-gray-400 absolute left-4 text-lg">person</span>
+                      <input
+                        type="text"
+                        placeholder="Last Name"
+                        value={form.lastName}
+                        onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                        className="w-full bg-transparent pl-12 pr-4 py-3.5 text-sm text-[#1e2229] placeholder-gray-400 focus:outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="relative flex items-center bg-white rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all overflow-hidden">
+                    <span className="material-icon text-gray-400 absolute left-4 text-lg">phone</span>
+                    <input
+                      type="tel"
+                      placeholder="Contact Number"
+                      value={form.contact}
+                      onChange={(e) => setForm({ ...form, contact: e.target.value })}
+                      className="w-full bg-transparent pl-12 pr-4 py-3.5 text-sm text-[#1e2229] placeholder-gray-400 focus:outline-none"
+                      required
+                    />
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="relative flex items-center bg-white/40 rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all">
+            <div className="relative flex items-center bg-white rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all overflow-hidden">
               <span className="material-icon text-gray-400 absolute left-4 text-lg">mail</span>
               <input
                 type="email"
@@ -143,7 +177,7 @@ export default function LoginPage() {
               />
             </div>
 
-            <div className="relative flex items-center bg-white/40 rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all">
+            <div className="relative flex items-center bg-white rounded-xl border border-gray-250 focus-within:border-[#ff6b35] focus-within:shadow-[0_0_0_3px_rgba(255,107,53,0.1)] transition-all overflow-hidden">
               <span className="material-icon text-gray-400 absolute left-4 text-lg">lock</span>
               <input
                 type="password"

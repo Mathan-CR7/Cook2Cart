@@ -8,8 +8,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface RecipeService {
-    RecipeResponse processRecipeAudio(MultipartFile audioFile);
+    RecipeResponse processRecipeAudio(MultipartFile audioFile, String videoId);
     RecipeResponse combineIngredients(CombineSourcesRequest request);
     List<Ingredient> parseIngredients(List<Ingredient> ingredients, int servings);
     List<StoreProduct> updateLatestPrices(List<StoreProduct> products);
+    RecipeResponse extractFromDescription(String videoId);
 }

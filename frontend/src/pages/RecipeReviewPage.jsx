@@ -8,46 +8,62 @@ import PremiumBackground from '../components/PremiumBackground';
 import FAB from '../components/FAB';
 import { cartCatalogService, cartService, recipeCatalogService, videoCatalogService } from '../utils/api';
 import DownloadButton from '../components/DownloadButton';
+import { formatQty, formatUnit } from '../utils/quantityFormatter';
+import { getEstimatedNutrition, getIngredientNutrition, getDisplayQuantityWithConversion } from '../utils/nutritionEstimator';
 
 const toNumber = (value, fallback = 1) => {
   const parsed = parseFloat(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const mapIngredientForRecipeDb = (ingredient) => ({
-  ingredientName: ingredient.name || ingredient.ingredientName || 'Ingredient',
-  recipeQuantity: toNumber(ingredient.recipeQuantity ?? ingredient.quantity, 1),
-  recipeUnit: ingredient.recipeUnit || ingredient.unit || 'pcs',
-  quantity: toNumber(ingredient.quantity ?? ingredient.recipeQuantity, 1),
-  unit: ingredient.unit || ingredient.recipeUnit || 'pcs',
-  estimated: Boolean(ingredient.estimated),
-  source: ingredient.source || 'user',
-  confidence: toNumber(ingredient.confidence, 1),
-});
+const mapIngredientForRecipeDb = (ingredient) => {
+  const rawQty = ingredient.recipeQuantity ?? ingredient.quantity;
+  const rawUnit = ingredient.recipeUnit || ingredient.unit || 'pcs';
+  const cleanQty = formatQty(rawQty);
+  const cleanUnit = formatUnit(rawUnit, cleanQty);
 
-const mapCartItemForDb = (item, recipeId = null) => ({
-  ingredientId: item.ingredientId || item.dbIngredientId || null,
-  selectedProductId: item.selectedProductId || null,
-  recipeId: recipeId || item.recipeId || null,
-  ingredientName: item.originalName || item.ingredientName || item.name || item.selectedProduct?.name || 'Ingredient',
-  recipeQuantity: toNumber(item.recipeQuantity ?? item.quantity, 1),
-  recipeUnit: item.recipeUnit || item.unit || 'pcs',
-  quantity: toNumber(item.quantity ?? item.recipeQuantity, 1),
-  unit: item.unit || item.recipeUnit || 'pcs',
-  price: toNumber(item.price, 0) * toNumber(item.qty, 1),
-  estimatedPrice: toNumber(item.price, 0) * toNumber(item.qty, 1),
-  availableAtHome: Boolean(item.availableAtHome),
-  selectedProduct: item.selectedProduct ? {
+  return {
+    ingredientName: ingredient.name || ingredient.ingredientName || 'Ingredient',
+    recipeQuantity: toNumber(cleanQty, 1),
+    recipeUnit: cleanUnit,
+    quantity: toNumber(cleanQty, 1),
+    unit: cleanUnit,
+    estimated: Boolean(ingredient.estimated),
+    source: ingredient.source || 'user',
+    confidence: toNumber(ingredient.confidence, 1),
+  };
+};
+
+const mapCartItemForDb = (item, recipeId = null) => {
+  const rawQty = item.recipeQuantity ?? item.quantity;
+  const rawUnit = item.recipeUnit || item.unit || 'pcs';
+  const cleanQty = formatQty(rawQty);
+  const cleanUnit = formatUnit(rawUnit, cleanQty);
+
+  return {
     ingredientId: item.ingredientId || item.dbIngredientId || null,
-    productName: item.selectedProduct.name || item.selectedProduct.productName || item.originalName || item.name || 'Product',
-    brand: item.selectedProduct.brand || 'Generic',
-    size: item.selectedProduct.size || `${item.quantity || item.recipeQuantity || 1} ${item.unit || item.recipeUnit || 'pcs'}`,
-    price: toNumber(item.selectedProduct.price ?? item.price, 0),
-    imageUrl: item.selectedProduct.imageUrl || item.selectedProduct.image || null,
-    source: item.selectedProduct.source || 'Cook2Cart',
-    availability: item.selectedProduct.availability || 'AVAILABLE',
-  } : null,
-});
+    selectedProductId: item.selectedProductId || null,
+    recipeId: recipeId || item.recipeId || null,
+    ingredientName: item.originalName || item.ingredientName || item.name || item.selectedProduct?.name || 'Ingredient',
+    recipeQuantity: toNumber(cleanQty, 1),
+    recipeUnit: cleanUnit,
+    quantity: toNumber(cleanQty, 1),
+    unit: cleanUnit,
+    price: toNumber(item.price, 0) * toNumber(item.qty, 1),
+    estimatedPrice: toNumber(item.price, 0) * toNumber(item.qty, 1),
+    availableAtHome: Boolean(item.availableAtHome),
+    selectedProduct: item.selectedProduct ? {
+      ingredientId: item.ingredientId || item.dbIngredientId || null,
+      productName: item.selectedProduct.name || item.selectedProduct.productName || item.originalName || item.name || 'Product',
+      brand: item.selectedProduct.brand || 'Generic',
+      size: item.selectedProduct.size || `${cleanQty} ${cleanUnit}`,
+      price: toNumber(item.selectedProduct.price ?? item.price, 0),
+      imageUrl: item.selectedProduct.imageUrl || item.selectedProduct.image || null,
+      source: item.selectedProduct.source || 'Cook2Cart',
+      availability: item.selectedProduct.availability || 'AVAILABLE',
+    } : null,
+  };
+};
 
 export default function RecipeReviewPage() {
   const navigate = useNavigate();
@@ -156,6 +172,46 @@ export default function RecipeReviewPage() {
     }
   };
 
+  const calculateTotalNutrition = (items) => {
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    const vitaminsSet = new Set();
+
+    items.forEach(item => {
+      const rawQty = item.recipeQuantity !== undefined && item.recipeQuantity !== null ? item.recipeQuantity : (item.quantity !== undefined && item.quantity !== null ? item.quantity : '');
+      const rawUnit = item.recipeUnit !== undefined && item.recipeUnit !== null ? item.recipeUnit : (item.unit !== undefined && item.unit !== null ? item.unit : 'pcs');
+      const qty = formatQty(rawQty);
+      const unit = formatUnit(rawUnit, qty);
+      
+      const nutrition = getIngredientNutrition(item.name || '', qty, unit);
+      totalCalories += nutrition.calories;
+      totalProtein += nutrition.protein;
+      totalCarbs += nutrition.carbohydrates;
+      totalFat += nutrition.fat;
+      
+      if (nutrition.vitamins) {
+        nutrition.vitamins.split(',').forEach(v => {
+          const cleanV = v.trim();
+          if (cleanV) vitaminsSet.add(cleanV);
+        });
+      }
+    });
+    
+    const vitaminsList = vitaminsSet.size > 0 
+      ? Array.from(vitaminsSet).slice(0, 4).join(', ')
+      : 'Minerals';
+    
+    return {
+      calories: `${totalCalories} kcal`,
+      protein: `${totalProtein.toFixed(1)}g`,
+      carbohydrates: `${totalCarbs.toFixed(1)}g`,
+      fat: `${totalFat.toFixed(1)}g`,
+      vitamins: vitaminsList
+    };
+  };
+
   const getConfidenceColor = (score) => {
     if (score >= 90) return 'text-[#10b981] bg-[#10b981]/10 border-[#10b981]/20';
     if (score >= 75) return 'text-amber-500 bg-amber-500/10 border-amber-500/20';
@@ -164,8 +220,10 @@ export default function RecipeReviewPage() {
 
   const generateCartItem = (ing) => {
     const name = (ing.name || '').toLowerCase();
-    const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
-    const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+    const rawQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
+    const rawUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+    const displayQty = formatQty(rawQty);
+    const displayUnit = formatUnit(rawUnit, displayQty);
     
     let brands = ['India Gate', 'Aashirvaad', 'Daawat', 'Fortune'];
     let sizes = ['1kg', '5kg', '10kg'];
@@ -271,24 +329,42 @@ export default function RecipeReviewPage() {
   };
 
   const handleContinue = async () => {
+    const recipeTitle = state.selectedRecipe?.title || 'My Recipe';
+    const recipeThumbnail = state.selectedRecipe?.thumbnailUrl || '';
+
     try {
       const formattedIngredients = ingredients.map(ing => {
-        const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
-        const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+        const rawQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : 1);
+        const rawUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+        const cleanQty = formatQty(rawQty);
+        const cleanUnit = formatUnit(rawUnit, cleanQty);
         return {
           ingredientId: ing.ingredientId || ing.dbIngredientId || null,
           name: ing.name,
-          recipeQuantity: parseFloat(displayQty) || 1,
-          recipeUnit: displayUnit,
-          quantity: parseFloat(displayQty) || 1,
-          unit: displayUnit,
+          recipeQuantity: toNumber(cleanQty, 1),
+          recipeUnit: cleanUnit,
+          quantity: toNumber(cleanQty, 1),
+          unit: cleanUnit,
           confidence: ing.confidence || 0.95
         };
       });
-      const response = await cartService.initialize(formattedIngredients, 4);
-      dispatch({ type: 'SET_CART', payload: response.data });
-      const generatedItems = Array.isArray(response.data) ? response.data : (response.data?.items || []);
-      const dbItems = generatedItems.map((item) => mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null));
+      const response = await cartService.initialize(formattedIngredients, 4, recipeTitle);
+      const cartData = response.data;
+      if (cartData) {
+        const items = Array.isArray(cartData) ? cartData : (cartData.items || []);
+        items.forEach(item => {
+          if (!item.recipeName) item.recipeName = recipeTitle;
+          if (!item.recipeThumbnail) item.recipeThumbnail = recipeThumbnail;
+        });
+      }
+      dispatch({ type: 'SET_CART', payload: cartData });
+      const generatedItems = Array.isArray(cartData) ? cartData : (cartData?.items || []);
+      const dbItems = generatedItems.map((item) => {
+        const mapped = mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null);
+        mapped.recipeName = recipeTitle;
+        mapped.recipeThumbnail = recipeThumbnail;
+        return mapped;
+      });
       if (dbItems.length > 0) {
         cartCatalogService.createCart({
           userId: state.user?.id || null,
@@ -300,11 +376,21 @@ export default function RecipeReviewPage() {
       navigate(`/cart/${videoId}`);
     } catch (err) {
       console.error('Failed to initialize cart on backend, falling back to local simulation:', err);
-      const cart = ingredients.map(ing => generateCartItem(ing));
+      const cart = ingredients.map(ing => {
+        const item = generateCartItem(ing);
+        item.recipeName = recipeTitle;
+        item.recipeThumbnail = recipeThumbnail;
+        return item;
+      });
       dispatch({ type: 'SET_CART', payload: cart });
       cartCatalogService.createCart({
         userId: state.user?.id || null,
-        items: cart.map((item) => mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null)),
+        items: cart.map((item) => {
+          const mapped = mapCartItemForDb(item, state.selectedRecipe?.dbRecipeId || null);
+          mapped.recipeName = recipeTitle;
+          mapped.recipeThumbnail = recipeThumbnail;
+          return mapped;
+        }),
       }).catch((saveErr) => {
         console.error('Failed to save fallback cart to database, continuing:', saveErr);
       });
@@ -374,6 +460,44 @@ export default function RecipeReviewPage() {
                 </div>
               )}
 
+              {state.selectedRecipe?.title && (
+                (() => {
+                  const nutrition = calculateTotalNutrition(ingredients);
+                  return (
+                    <div className="glass p-5 rounded-2xl border border-emerald-500/15 bg-emerald-55/5 shadow-sm mb-6 animate-fade-slide-up">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="material-icon text-emerald-600 text-lg">analytics</span>
+                        <h4 className="font-display font-extrabold text-sm text-emerald-800">Estimated Nutritional Profile (Per Serving)</h4>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Calories</div>
+                          <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.calories}</div>
+                        </div>
+                        <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Protein</div>
+                          <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.protein}</div>
+                        </div>
+                        <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Carbs</div>
+                          <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.carbohydrates}</div>
+                        </div>
+                        <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Fat</div>
+                          <div className="font-display font-black text-base text-emerald-700 mt-0.5">{nutrition.fat}</div>
+                        </div>
+                        <div className="bg-white/60 rounded-xl p-3 border border-emerald-100/50 text-center col-span-2 sm:col-span-1 flex flex-col justify-center">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 font-display">Vitamins</div>
+                          <div className="font-display font-extrabold text-[10px] text-emerald-600 mt-1 line-clamp-2 leading-tight">
+                            {nutrition.vitamins}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+
               <h2 className="font-display font-black text-xl text-[#1e2229] mb-6 flex items-center gap-2">
                 <span className="w-1.5 h-5 bg-[#ff6b35] rounded-full" />
                 <span>Extracted Ingredients ({ingredients.length})</span>
@@ -395,8 +519,10 @@ export default function RecipeReviewPage() {
                   ) : (
                     ingredients.map((ing, i) => {
                       const score = Math.round((ing.confidence || 0.95) <= 1 ? (ing.confidence || 0.95) * 100 : (ing.confidence || 0.95));
-                      const displayQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : '');
-                      const displayUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+                      const rawQty = ing.recipeQuantity !== undefined && ing.recipeQuantity !== null ? ing.recipeQuantity : (ing.quantity !== undefined && ing.quantity !== null ? ing.quantity : '');
+                      const rawUnit = ing.recipeUnit !== undefined && ing.recipeUnit !== null ? ing.recipeUnit : (ing.unit !== undefined && ing.unit !== null ? ing.unit : 'pcs');
+                      const displayQty = formatQty(rawQty);
+                      const displayUnit = formatUnit(rawUnit, displayQty);
 
                       return (
                         <motion.div 
@@ -442,13 +568,38 @@ export default function RecipeReviewPage() {
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
                               <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border flex-shrink-0 ${getConfidenceColor(score)}`}>
                                 {score}% Match
                               </span>
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-[#ff6b35] font-display font-extrabold text-sm flex-shrink-0">{displayQty} {displayUnit}</span>
-                                <span className="text-gray-700 text-sm font-semibold truncate">{ing.name}</span>
+                              <div className="flex-1 min-w-0 flex flex-col">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[#ff6b35] font-display font-extrabold text-sm flex-shrink-0">{getDisplayQuantityWithConversion(ing.name || '', displayQty, displayUnit)}</span>
+                                  <span className="text-gray-700 text-sm font-semibold truncate">{ing.name}</span>
+                                </div>
+                                {(() => {
+                                  const ingNutrition = getIngredientNutrition(ing.name || '', displayQty, displayUnit);
+                                  return (
+                                    <p className="text-[10px] text-emerald-600 font-semibold mt-1 font-display flex items-center gap-2 flex-wrap">
+                                      <span className="inline-flex items-center gap-0.5">
+                                        <span className="material-icon text-[10px]">bolt</span>
+                                        <span>{ingNutrition.calories} kcal</span>
+                                      </span>
+                                      <span>•</span>
+                                      <span>P: {ingNutrition.protein}g</span>
+                                      <span>•</span>
+                                      <span>C: {ingNutrition.carbohydrates}g</span>
+                                      <span>•</span>
+                                      <span>F: {ingNutrition.fat}g</span>
+                                      {ingNutrition.vitamins && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="text-gray-400 text-[9px] font-medium">{ingNutrition.vitamins.split(',')[0]}</span>
+                                        </>
+                                      )}
+                                    </p>
+                                  );
+                                })()}
                               </div>
                             </div>
                           )}

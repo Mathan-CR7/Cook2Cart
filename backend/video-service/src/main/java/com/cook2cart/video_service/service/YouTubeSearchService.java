@@ -81,12 +81,33 @@ public class YouTubeSearchService {
             }
 
             log.info("Fetched {} videos from YouTube", videos.size());
-            videoSearchService.indexYouTubeResults(query, videos);
+            try {
+                videoSearchService.indexYouTubeResults(query, videos);
+            } catch (Exception ex) {
+                log.error("Failed to index YouTube results in Elasticsearch", ex);
+            }
 
             return videos;
 
         } catch (Exception e) {
-            log.error("YouTube search failed", e);
+            log.error("YouTube search failed, falling back to Elasticsearch", e);
+            try {
+                List<com.cook2cart.video_service.search.VideoSearchDocument> docs = videoSearchService.searchHistory(query);
+                if (docs != null && !docs.isEmpty()) {
+                    log.info("Found {} cached videos in Elasticsearch for query: {}", docs.size(), query);
+                    return docs.stream()
+                            .map(doc -> new YouTubeVideoDTO(
+                                    doc.getVideoId(),
+                                    doc.getTitle(),
+                                    doc.getChannelName(),
+                                    doc.getThumbnailUrl(),
+                                    "https://www.youtube.com/watch?v=" + doc.getVideoId()
+                            ))
+                            .toList();
+                }
+            } catch (Exception ex) {
+                log.error("Elasticsearch fallback search failed", ex);
+            }
             throw new RuntimeException("Failed to search YouTube videos");
         }
     }

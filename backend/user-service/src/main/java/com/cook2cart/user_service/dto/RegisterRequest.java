@@ -11,8 +11,16 @@ import lombok.*;
 @AllArgsConstructor
 public class RegisterRequest {
 
-    @NotBlank(message = "Name is required")
     private String name;
+
+    @NotBlank(message = "First name is required")
+    private String firstName;
+
+    @NotBlank(message = "Last name is required")
+    private String lastName;
+
+    @NotBlank(message = "Contact number is required")
+    private String contact;
 
     @Email(message = "Invalid email format")
     @NotBlank(message = "Email is required")

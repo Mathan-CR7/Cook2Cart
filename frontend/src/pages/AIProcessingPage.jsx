@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useApp } from '../context/AppContext';
+import PremiumBackground from '../components/PremiumBackground';
 import api, { videoService, aiService, videoCatalogService, recipeCatalogService } from '../utils/api';
 import { simplifyRecipeTitle } from '../utils/recipeTitle';
 
@@ -181,6 +183,69 @@ export default function AIProcessingPage() {
       });
 
       try {
+        setCurrentStep(2);
+        dispatch({ type: 'SET_AI_STEP', payload: 2 });
+        setProgress(15);
+        setStatusMsg('Checking YouTube description for ingredients...');
+
+        try {
+          await saveVideoMetadata();
+          const descResponse = await aiService.extractDescription(videoId);
+          const descriptionIngredients = descResponse.data?.ingredients || [];
+
+          if (descriptionIngredients.length > 0) {
+            setCurrentStep(4);
+            dispatch({ type: 'SET_AI_STEP', payload: 4 });
+            setProgress(100);
+            setStatusMsg('Ingredients found in description. Preparing review...');
+
+            let instructions = descResponse.data.instructions;
+            if (!instructions || instructions.length === 0) {
+              let detectedLang = 'en';
+              const titleLower = videoTitle.toLowerCase();
+              if (titleLower.includes('tamil') || /[\u0b80-\u0bff]/.test(videoTitle)) {
+                detectedLang = 'ta';
+              } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
+                detectedLang = 'hi';
+              }
+              instructions =
+                detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
+                detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
+                SAMPLE_INSTRUCTIONS_EN;
+            }
+
+            const savedRecipe = await saveRecipeToDb(descriptionIngredients, instructions);
+            const dbIngredients = mergeSavedIngredientIds(descriptionIngredients, savedRecipe?.ingredients || []);
+
+            dispatch({
+              type: 'SET_SELECTED_RECIPE',
+              payload: {
+                id: videoId,
+                videoId,
+                dbVideoId,
+                dbRecipeId,
+                title: videoTitle,
+                thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+              },
+            });
+
+            dispatch({
+              type: 'FINISH_AI_PROCESSING',
+              payload: {
+                ingredients: dbIngredients,
+                instructions,
+              },
+            });
+            syncStoredRecipe(dbIngredients, instructions);
+            setTimeout(() => {
+              navigate(`/review/${videoId}`);
+            }, 1200);
+            return;
+          }
+        } catch (descErr) {
+          console.log('No ingredients found in YouTube description. Continuing with video processing...', descErr);
+        }
+
         // Step 1: Downloading Video & Step 2: Extracting Audio
         setCurrentStep(0);
         dispatch({ type: 'SET_AI_STEP', payload: 0 });
@@ -377,41 +442,155 @@ export default function AIProcessingPage() {
   }, [videoId, locationState, dispatch, navigate]);
 
   return (
-    <div className="bg-white min-h-screen flex items-center justify-center px-4 pb-16">
-      <div className="w-full max-w-[560px] text-center">
-        <div className="mb-10">
-          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-orange-100 to-red-100 rounded-2xl flex items-center justify-center mb-5">
-            <span className="material-icon fill !text-3xl text-orange-500 animate-pulse">auto_awesome</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">AI is Processing Your Recipe</h1>
-          <p className="text-gray-500 text-sm">{statusMsg}</p>
-        </div>
+    <div className="c2c-root min-h-screen flex flex-col justify-center items-center px-4 py-20 relative overflow-hidden bg-white">
+      <PremiumBackground />
 
-        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-12">
-          <div className="h-full rounded-full transition-all duration-500 ease-out gradient-bg" style={{ width: `${progress}%` }} />
-        </div>
-
-        <div className="flex flex-col gap-2 text-left">
-          {STEPS.map((step, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-300 ${
-                currentStep >= i ? 'border-orange-200 bg-orange-50/50' : 'border-gray-100 opacity-30'
-              } ${currentStep > i ? 'border-green-200 bg-green-50/50' : ''}`}
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+        className="w-full max-w-[540px] text-center z-10"
+      >
+        <div className="relative w-40 h-40 mx-auto mb-10">
+          <motion.div
+            animate={{ scale: [1, 1.05, 1] }}
+            transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+            className="absolute inset-4 rounded-full border border-orange-200/40 bg-white/80 backdrop-blur-xl flex items-center justify-center shadow-lg"
+          >
+            <motion.span
+              animate={{ opacity: [0.75, 1, 0.75] }}
+              transition={{ repeat: Infinity, duration: 1.5 }}
+              className="material-icon fill text-4xl text-[#ff6b35]"
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                currentStep > i ? 'bg-green-100 text-green-600' : currentStep === i ? 'bg-orange-100 text-orange-500 animate-pulse' : 'bg-gray-100 text-gray-400'
-              }`}>
-                <span className="material-icon !text-xl">{currentStep > i ? 'check' : step.icon}</span>
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm text-gray-900">{step.label}</h3>
-                <p className="text-xs text-gray-500">{step.desc}</p>
-              </div>
-            </div>
-          ))}
+              psychology
+            </motion.span>
+          </motion.div>
+
+          <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+            <circle
+              cx="50"
+              cy="50"
+              r="46"
+              className="stroke-[#ff6b35]/5 fill-none"
+              strokeWidth="1.5"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="46"
+              className="fill-none animate-spin-slow"
+              stroke="#ff8e53"
+              strokeWidth="1.5"
+              strokeDasharray="10 30"
+              style={{ transformOrigin: '50% 50%' }}
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="42"
+              className="stroke-gray-200/40 fill-none"
+              strokeWidth="3.5"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="42"
+              className="fill-none"
+              stroke="url(#aiGlow)"
+              strokeWidth="4"
+              strokeDasharray="264"
+              strokeDashoffset={264 - (264 * progress) / 100}
+              strokeLinecap="round"
+              style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+            />
+            <defs>
+              <linearGradient id="aiGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#ff8e53" />
+                <stop offset="60%" stopColor="#ff6b35" />
+                <stop offset="100%" stopColor="#ff4f11" />
+              </linearGradient>
+            </defs>
+          </svg>
         </div>
-      </div>
+
+        <div className="mb-10">
+          <h1 className="font-display font-extrabold text-2xl md:text-3xl text-[#1e2229] mb-2 tracking-tight">
+            AI Recipe Parsing Active
+          </h1>
+          <p className="text-gray-500 text-sm min-h-10 px-6 overflow-hidden text-ellipsis leading-relaxed font-display font-medium">
+            {statusMsg}
+          </p>
+        </div>
+
+        <div className="w-full h-2 bg-gray-200/40 rounded-full overflow-hidden mb-12 border border-white/90 shadow-inner">
+          <motion.div
+            className="h-full rounded-full gradient-bg"
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          />
+        </div>
+
+        <div className="relative pl-12 flex flex-col gap-4 text-left">
+          <div className="absolute left-[18px] top-6 bottom-6 w-[2px] bg-gray-200/60 z-0">
+            <motion.div
+              className="w-full bg-gradient-to-b from-[#10b981] to-[#ff6b35]"
+              animate={{ height: `${currentStep >= 0 ? (currentStep / (STEPS.length - 1)) * 100 : 0}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+
+          {STEPS.map((step, i) => {
+            const isCompleted = currentStep > i;
+            const isActive = currentStep === i;
+
+            return (
+              <motion.div
+              key={i}
+                initial={{ opacity: 0, x: -15 }}
+                animate={{
+                  opacity: isActive ? 1 : isCompleted ? 0.75 : 0.4,
+                  x: 0,
+                  scale: isActive ? 1.01 : 1,
+                  boxShadow: isActive ? '0 8px 30px rgba(255, 107, 53, 0.06)' : 'none'
+                }}
+                transition={{ duration: 0.45 }}
+                className={`glass p-4 rounded-2xl border flex items-center gap-4 relative z-10 transition-colors ${
+                  isActive
+                    ? 'border-[#ff6b35]/30 bg-white'
+                    : isCompleted
+                      ? 'border-gray-200/50'
+                      : 'border-gray-200/20'
+                }`}
+              >
+                <motion.div
+                  animate={{
+                    scale: isActive ? [1, 1.08, 1] : 1,
+                    rotate: isCompleted ? 360 : 0
+                  }}
+                  transition={{
+                    scale: isActive ? { repeat: Infinity, duration: 1.8 } : { duration: 0.3 }
+                  }}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 z-10 ${
+                    isCompleted
+                      ? 'bg-emerald-50 text-[#10b981] border border-[#10b981]/20'
+                      : isActive
+                        ? 'gradient-bg text-white shadow-md'
+                        : 'bg-white text-gray-400 border border-gray-200/50'
+                  }`}
+                >
+                  <span className="material-icon !text-lg">{isCompleted ? 'check' : step.icon}</span>
+                </motion.div>
+              <div>
+                  <h3 className={`font-display font-bold text-sm transition-colors ${isActive ? 'text-[#ff6b35]' : isCompleted ? 'text-gray-700' : 'text-gray-400'}`}>
+                    {step.label}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{step.desc}</p>
+              </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </motion.div>
     </div>
   );
 }

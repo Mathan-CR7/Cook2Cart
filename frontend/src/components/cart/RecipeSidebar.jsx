@@ -1,3 +1,12 @@
+import { getDisplayQuantityWithConversion, getIngredientNutrition } from '../../utils/nutritionEstimator';
+import { formatQty, formatUnit } from '../../utils/quantityFormatter';
+
+const getIngredientQuantityText = (ingredient) => {
+  const qty = formatQty(ingredient.recipeQuantity || ingredient.quantity || '');
+  const unit = formatUnit(ingredient.recipeUnit || ingredient.unit || 'pcs', qty);
+  return getDisplayQuantityWithConversion(ingredient.ingredientName || ingredient.name || '', qty, unit);
+};
+
 export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingredients }) {
   return (
     <aside className="rounded-[22px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(30,34,41,0.05)] lg:sticky lg:top-6">
@@ -50,10 +59,19 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-orange-500 shadow-sm">
                     <span className="material-icon !text-lg">restaurant</span>
                   </span>
-                  <span className="min-w-0 truncate text-sm font-black text-gray-800">{ingredient.ingredientName}</span>
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-black text-gray-800">{ingredient.ingredientName}</span>
+                    <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-400">
+                      {getIngredientQuantityText(ingredient)}
+                    </span>
+                  </div>
                 </div>
-                <span className="shrink-0 text-sm font-black text-orange-600">
-                  {ingredient.recipeQuantity || 'As needed'} {ingredient.recipeUnit}
+                <span className="shrink-0 rounded-xl bg-green-50 px-2 py-1 text-[11px] font-black text-green-700">
+                  {getIngredientNutrition(
+                    ingredient.ingredientName || ingredient.name || '',
+                    ingredient.recipeQuantity || ingredient.quantity || 1,
+                    ingredient.recipeUnit || ingredient.unit || 'pcs'
+                  ).calories} kcal
                 </span>
               </div>
             ))

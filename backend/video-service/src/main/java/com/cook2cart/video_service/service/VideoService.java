@@ -76,7 +76,7 @@ public class VideoService {
 
         // Download only the audio track directly from YouTube (extremely fast)
         downloadAudioOnly(youtubeUrl, audioPath);
-        
+
         // Create a dummy video placeholder to satisfy database and metadata fields
         createDummyVideoFile(videoPath);
 

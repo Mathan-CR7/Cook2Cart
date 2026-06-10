@@ -12,6 +12,8 @@ import {
   money,
   vegetableOptions,
 } from './cartMath';
+import { getDisplayQuantityWithConversion, getIngredientNutrition } from '../../utils/nutritionEstimator';
+import { formatQty, formatUnit } from '../../utils/quantityFormatter';
 
 const productKey = (product) => String(product?.id || product?.barcode || product?.productName || '');
 
@@ -43,6 +45,10 @@ export default function IngredientProductCard({
   }
 
   const required = displayQty(ingredient);
+  const requiredQty = formatQty(ingredient.recipeQuantity || ingredient.quantity || '');
+  const requiredUnit = formatUnit(ingredient.recipeUnit || ingredient.unit || 'pcs', requiredQty);
+  const convertedRequired = getDisplayQuantityWithConversion(ingredient.ingredientName, requiredQty, requiredUnit);
+  const nutrition = getIngredientNutrition(ingredient.ingredientName, requiredQty || 1, requiredUnit);
   const packSize = getPackSize(selectedProduct);
   const packPrice = getProductPrice(selectedProduct);
   const marketProduct = isMarketProduct(selectedProduct);
@@ -65,6 +71,9 @@ export default function IngredientProductCard({
             <h3 className="text-lg font-black leading-tight text-gray-900">{ingredient.ingredientName}</h3>
             <p className="mt-0.5 text-sm font-medium text-gray-500">
               Required: <span className="font-black text-orange-600">{required || 'As needed'}</span>
+            </p>
+            <p className="mt-1 text-xs font-bold text-gray-400">
+              Converted: <span className="text-gray-700">{convertedRequired || 'As needed'}</span>
             </p>
           </div>
         </div>
@@ -146,6 +155,25 @@ export default function IngredientProductCard({
             </div>
           </div>
         )}
+
+        <div className="mt-3 grid gap-2 rounded-2xl border border-green-100 bg-green-50/70 p-3 sm:grid-cols-4">
+          <div>
+            <span className="block text-[10px] font-black uppercase text-green-700/70">Calories</span>
+            <span className="text-xs font-black text-gray-900">{nutrition.calories} kcal</span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-black uppercase text-green-700/70">Protein</span>
+            <span className="text-xs font-black text-gray-900">{nutrition.protein}g</span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-black uppercase text-green-700/70">Carbs</span>
+            <span className="text-xs font-black text-gray-900">{nutrition.carbohydrates}g</span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-black uppercase text-green-700/70">Fat</span>
+            <span className="text-xs font-black text-gray-900">{nutrition.fat}g</span>
+          </div>
+        </div>
       </div>
 
       {atHome && (

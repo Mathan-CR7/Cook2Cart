@@ -2,6 +2,7 @@ package com.cook2cart.user_service.service;
 
 
 import com.cook2cart.user_service.dto.AddressRequest;
+import com.cook2cart.user_service.dto.AddressResponse;
 import com.cook2cart.user_service.dto.LocationRequest;
 import com.cook2cart.user_service.entity.User;
 import com.cook2cart.user_service.entity.UserAddress;
@@ -20,8 +21,8 @@ public class AddressService {
     private final UserRepository userRepository;
     private final UserAddressRepository addressRepository;
 
-    public String saveManualAddress(String email,
-                                    AddressRequest request) {
+    public AddressResponse saveManualAddress(String email,
+                                             AddressRequest request) {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -38,13 +39,11 @@ public class AddressService {
                 .user(user)
                 .build();
 
-        addressRepository.save(address);
-
-        return "Address Saved Successfully";
+        return toResponse(addressRepository.save(address));
     }
 
-    public String saveCurrentLocation(String email,
-                                      LocationRequest request) {
+    public AddressResponse saveCurrentLocation(String email,
+                                               LocationRequest request) {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -58,16 +57,33 @@ public class AddressService {
                 .user(user)
                 .build();
 
-        addressRepository.save(address);
-
-        return "Location Saved Successfully";
+        return toResponse(addressRepository.save(address));
     }
 
-    public List<UserAddress> getAddresses(String email) {
+    public List<AddressResponse> getAddresses(String email) {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        return addressRepository.findByUser(user);
+        return addressRepository.findByUser(user)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private AddressResponse toResponse(UserAddress address) {
+        return AddressResponse.builder()
+                .id(address.getId())
+                .addressType(address.getAddressType())
+                .latitude(address.getLatitude())
+                .longitude(address.getLongitude())
+                .doorNo(address.getDoorNo())
+                .street(address.getStreet())
+                .city(address.getCity())
+                .state(address.getState())
+                .pincode(address.getPincode())
+                .isDefault(address.getIsDefault())
+                .createdAt(address.getCreatedAt())
+                .build();
     }
 }

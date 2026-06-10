@@ -80,16 +80,17 @@ export default function LocationSelectionPage() {
         };
 
         try {
-          await addressService.addLocation(location);
+          const res = await addressService.addLocation(location);
+          const saved = res.data || {};
           const address = {
-            id: `local-location-${Date.now()}`,
             ...location,
-            addressType: 'CURRENT_LOCATION',
+            ...saved,
+            addressType: saved.addressType || 'CURRENT_LOCATION',
             label: `Current Location (${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)})`,
           };
 
           setUseCurrent(true);
-          setSelectedAddressId(null);
+          setSelectedAddressId(address.id || null);
           setSavedAddresses((items) => [address, ...items]);
           dispatch({ type: 'ADD_ADDRESS', payload: address });
           dispatch({ type: 'SET_SELECTED_ADDRESS', payload: address });
@@ -114,8 +115,14 @@ export default function LocationSelectionPage() {
     setError('');
 
     try {
-      await addressService.addManual(manual);
-      const address = { id: `local-manual-${Date.now()}`, ...manual, addressType: 'MANUAL', label: `${manual.doorNo}, ${manual.street}` };
+      const res = await addressService.addManual(manual);
+      const saved = res.data || {};
+      const address = {
+        ...manual,
+        ...saved,
+        addressType: saved.addressType || 'MANUAL',
+        label: formatAddress({ ...manual, ...saved, addressType: saved.addressType || 'MANUAL' }),
+      };
       setSavedAddresses((items) => [address, ...items]);
       dispatch({ type: 'ADD_ADDRESS', payload: address });
       dispatch({ type: 'SET_SELECTED_ADDRESS', payload: address });

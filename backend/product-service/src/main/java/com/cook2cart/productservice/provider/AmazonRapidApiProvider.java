@@ -162,6 +162,12 @@ public class AmazonRapidApiProvider implements ProductProvider {
     }
 
     private String extractPackQuantity(String productName) {
+        Pattern comboPattern = Pattern.compile("\\b\\d+(?:\\.\\d+)?\\s?(kg|g|gram|grams|l|ml|litre|liter)\\s*(?:pack\\s*of\\s*\\d+|x\\s*\\d+|\\d+\\s*(?:pcs|pieces|pouches|sachets|units|packets))\\b", Pattern.CASE_INSENSITIVE);
+        Matcher comboMatcher = comboPattern.matcher(productName);
+        if (comboMatcher.find()) {
+            return comboMatcher.group();
+        }
+
         Pattern pattern = Pattern.compile("\\b\\d+(?:\\.\\d+)?\\s?(kg|g|gram|grams|l|ml|litre|liter|pack|pcs|pieces)\\b", Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(productName);
         return matcher.find() ? matcher.group() : null;

@@ -30,4 +30,9 @@ build/
 !**/src/test/**/build/
 
 ### VS Code ###
-.vscode/
+# Data folder
+/data/
+
+# Audio and video generated files
+audio/
+videos/

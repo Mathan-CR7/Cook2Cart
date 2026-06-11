@@ -80,6 +80,15 @@ public class ProductSuggestionService {
         }
 
         Map<Long, String> ingredientNames = new HashMap<>();
+        try {
+            List<RecipeIngredientDTO> ingredients = recipeServiceClient.getRecipeIngredients(recipeId);
+            if (ingredients != null) {
+                ingredients.forEach(item -> ingredientNames.put(item.id(), item.ingredientName()));
+            }
+        } catch (Exception ex) {
+            log.warn("Could not load ingredient names for saved suggestions. recipeId={}", recipeId, ex);
+        }
+
         return groupByIngredient(suggestions, ingredientNames);
     }
 

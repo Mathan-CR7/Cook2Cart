@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SearchResultsPage from './pages/SearchResultsPage';
@@ -21,12 +22,12 @@ export default function App() {
           <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/process/:videoId" element={<AIProcessingPage />} />
           <Route path="/review/:videoId" element={<RecipeReviewPage />} />
-          <Route path="/cart" element={<SmartCartPage />} />
-          <Route path="/cart/:videoId" element={<SmartCartPage />} />
-          <Route path="/location/:videoId" element={<LocationSelectionPage />} />
-          <Route path="/order/:videoId" element={<OrderSummaryPage />} />
-          <Route path="/profile" element={<UserProfilePage />} />
-          <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/cart" element={<ProtectedRoute><SmartCartPage /></ProtectedRoute>} />
+          <Route path="/cart/:videoId" element={<ProtectedRoute><SmartCartPage /></ProtectedRoute>} />
+          <Route path="/location/:videoId" element={<ProtectedRoute><LocationSelectionPage /></ProtectedRoute>} />
+          <Route path="/order/:videoId" element={<ProtectedRoute><OrderSummaryPage /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
+          <Route path="/favorites" element={<ProtectedRoute><FavoritesPage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AppProvider>

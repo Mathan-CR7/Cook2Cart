@@ -38,6 +38,13 @@ const getRecipeThumbnail = (state, videoId) => (
   || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null)
 );
 
+const getRecipeDuration = (state) => (
+  state.selectedRecipe?.duration
+  || state.selectedRecipe?.videoDuration
+  || state.cartObject?.duration
+  || null
+);
+
 const getIngredientQuantity = (suggestionGroup, extractedIngredients) => {
   const match = extractedIngredients.find((ingredient) => {
     const idMatch = String(ingredient.recipeIngredientId || ingredient.id || '') === String(suggestionGroup.recipeIngredientId || '');
@@ -47,7 +54,7 @@ const getIngredientQuantity = (suggestionGroup, extractedIngredients) => {
 
   return {
     recipeIngredientId: suggestionGroup.recipeIngredientId,
-    ingredientName: suggestionGroup.ingredientName || match?.name || match?.ingredientName || 'Ingredient',
+    ingredientName: match?.ingredientName || match?.name || suggestionGroup.ingredientName || 'Ingredient',
     recipeQuantity: match?.recipeQuantity ?? match?.quantity ?? suggestionGroup.recipeQuantity ?? '',
     recipeUnit: match?.recipeUnit ?? match?.unit ?? suggestionGroup.recipeUnit ?? '',
   };
@@ -80,13 +87,14 @@ export default function SmartCartPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [dbIngredients, setDbIngredients] = useState([]);
   const [servingsConfirmed, setServingsConfirmed] = useState(false);
-  const [targetServings, setTargetServings] = useState(4);
+  const [targetServings, setTargetServings] = useState(2);
   const [atHomeIngredients, setAtHomeIngredients] = useState({});
   const [removedIngredients, setRemovedIngredients] = useState({});
 
   const recipeId = getRecipeId(state, videoId);
   const recipeTitle = getRecipeTitle(state);
   const thumbnail = getRecipeThumbnail(state, videoId);
+  const duration = getRecipeDuration(state);
   const locationLabel = state.selectedAddress?.label
     || state.selectedAddress?.city
     || state.selectedAddress?.addressType
@@ -100,17 +108,23 @@ export default function SmartCartPage() {
       setError('');
 
       try {
-        const [suggestionsResponse, ingredientsResponse] = await Promise.allSettled([
-          productService.generateSuggestions(recipeId),
+        const [savedSuggestionsResponse, ingredientsResponse] = await Promise.allSettled([
+          productService.getSuggestionsByRecipe(recipeId),
           recipeCatalogService.getRecipeIngredients(recipeId),
         ]);
 
-        const groups = suggestionsResponse.status === 'fulfilled' && Array.isArray(suggestionsResponse.value.data)
-          ? suggestionsResponse.value.data
+        let groups = savedSuggestionsResponse.status === 'fulfilled' && Array.isArray(savedSuggestionsResponse.value.data)
+          ? savedSuggestionsResponse.value.data
           : [];
         const savedIngredients = ingredientsResponse.status === 'fulfilled' && Array.isArray(ingredientsResponse.value.data)
           ? ingredientsResponse.value.data
           : [];
+
+        if (groups.length === 0) {
+          const generatedResponse = await productService.generateSuggestions(recipeId);
+          groups = Array.isArray(generatedResponse.data) ? generatedResponse.data : [];
+        }
+
         if (!mounted) return;
 
         setSuggestionGroups(groups);
@@ -149,13 +163,17 @@ export default function SmartCartPage() {
     };
   }, [recipeId]);
 
+  const hasIngredients = useMemo(() => {
+    return (state.extractedIngredients?.length > 0) || dbIngredients.length > 0 || suggestionGroups.length > 0;
+  }, [state.extractedIngredients, dbIngredients, suggestionGroups]);
+
   const ingredientSource = useMemo(() => {
     const localIngredients = state.extractedIngredients || [];
     return localIngredients.length > 0 ? localIngredients : dbIngredients;
   }, [state.extractedIngredients, dbIngredients]);
 
   const scaledIngredientSource = useMemo(() => {
-    const factor = targetServings / 4;
+    const factor = targetServings;
     return ingredientSource.map((ingredient) => scaleIngredient(ingredient, factor));
   }, [ingredientSource, targetServings]);
 
@@ -163,10 +181,10 @@ export default function SmartCartPage() {
     if (suggestionGroups.length > 0) {
       return suggestionGroups
         .filter((group) => !removedIngredients[group.recipeIngredientId])
-        .map((group) => getIngredientQuantity(group, scaledIngredientSource));
+        .map((group) => getIngredientQuantity(group, ingredientSource));
     }
 
-    return scaledIngredientSource
+    return ingredientSource
       .filter((ingredient) => !removedIngredients[ingredient.recipeIngredientId || ingredient.id || ingredient.ingredientName])
       .map((ingredient) => ({
         recipeIngredientId: ingredient.recipeIngredientId || ingredient.id,
@@ -174,7 +192,7 @@ export default function SmartCartPage() {
         recipeQuantity: ingredient.recipeQuantity ?? ingredient.quantity ?? '',
         recipeUnit: ingredient.recipeUnit ?? ingredient.unit ?? '',
       }));
-  }, [suggestionGroups, scaledIngredientSource, removedIngredients]);
+  }, [suggestionGroups, ingredientSource, removedIngredients]);
 
   const summaryItems = useMemo(() => (
     suggestionGroups.flatMap((group) => {
@@ -290,7 +308,7 @@ export default function SmartCartPage() {
 
       const response = await cartCatalogService.createCart({
         userId: state.user?.id || null,
-        originalServings: 4,
+        originalServings: 1,
         targetServings,
         items: savedItems,
       });
@@ -314,6 +332,8 @@ export default function SmartCartPage() {
         recipeTitle={recipeTitle}
         recipeId={recipeId}
         thumbnail={thumbnail}
+        duration={duration}
+        servings={targetServings}
         locationLabel={locationLabel}
         ingredients={ingredients}
         suggestionGroups={displaySuggestionGroups}
@@ -340,8 +360,24 @@ export default function SmartCartPage() {
         onCloseConfirm={() => setConfirmOpen(false)}
         onConfirm={handleSaveCart}
       />
+      {!hasIngredients && !loading && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-2xl text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+              <span className="material-icon !text-3xl">shopping_cart</span>
+            </div>
+            <h2 className="mt-4 text-xl font-black text-gray-900">No recipe data found</h2>
+            <p className="mt-2 text-sm font-medium text-gray-500">
+              Process a recipe first to generate a shopping cart.
+            </p>
+            <button onClick={() => navigate('/')} className="gradient-bg mt-6 w-full rounded-2xl py-4 text-sm font-black text-white shadow-lg">
+              Go to Home
+            </button>
+          </div>
+        </div>
+      )}
       <ServingsModal
-        open={!servingsConfirmed}
+        open={!servingsConfirmed && hasIngredients}
         initialValue={targetServings}
         onConfirm={(persons) => {
           setTargetServings(persons);

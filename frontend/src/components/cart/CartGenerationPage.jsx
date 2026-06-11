@@ -9,6 +9,8 @@ export default function CartGenerationPage({
   recipeTitle,
   recipeId,
   thumbnail,
+  duration,
+  servings,
   locationLabel,
   ingredients,
   suggestionGroups,
@@ -97,6 +99,8 @@ export default function CartGenerationPage({
           thumbnail={thumbnail}
           recipeTitle={recipeTitle}
           recipeId={recipeId}
+          duration={duration}
+          servings={servings}
           ingredients={ingredients}
         />
 

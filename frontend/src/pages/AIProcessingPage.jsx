@@ -61,6 +61,22 @@ const toNumber = (value, fallback = 1) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const buildFallbackInstructions = (recipeTitle = 'recipe', ingredients = []) => {
+  const ingredientNames = ingredients
+    .map((ingredient) => ingredient.name || ingredient.ingredientName)
+    .filter(Boolean)
+    .slice(0, 6);
+  const ingredientText = ingredientNames.length ? ingredientNames.join(', ') : 'the extracted ingredients';
+
+  return [
+    `Prepare all ingredients for ${recipeTitle}: ${ingredientText}.`,
+    'Measure and arrange the ingredients according to the extracted quantities.',
+    'Follow the cooking method shown in the video, adding ingredients in the same order.',
+    'Cook, bake, mix, or simmer until the recipe reaches the expected texture and doneness.',
+    'Taste, adjust seasoning or sweetness if needed, then garnish and serve.',
+  ];
+};
+
 const mapIngredientForDb = (ingredient) => ({
   ingredientName: ingredient.name || ingredient.ingredientName || 'Ingredient',
   recipeQuantity: toNumber(ingredient.recipeQuantity ?? ingredient.quantity, 1),
@@ -208,10 +224,7 @@ export default function AIProcessingPage() {
               } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
                 detectedLang = 'hi';
               }
-              instructions =
-                detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
-                detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
-                SAMPLE_INSTRUCTIONS_EN;
+              instructions = buildFallbackInstructions(videoTitle, descriptionIngredients);
             }
 
             const savedRecipe = await saveRecipeToDb(descriptionIngredients, instructions);
@@ -311,10 +324,7 @@ export default function AIProcessingPage() {
           } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
             detectedLang = 'hi';
           }
-          instructions = 
-            detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
-            detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
-            SAMPLE_INSTRUCTIONS_EN;
+          instructions = buildFallbackInstructions(videoTitle, aiResponse.data.ingredients);
         }
 
         const savedRecipe = await saveRecipeToDb(aiResponse.data.ingredients, instructions);
@@ -398,10 +408,7 @@ export default function AIProcessingPage() {
               } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
                 detectedLang = 'hi';
               }
-              const fallbackInstructions = 
-                detectedLang === 'ta' ? SAMPLE_INSTRUCTIONS_TA :
-                detectedLang === 'hi' ? SAMPLE_INSTRUCTIONS_HI :
-                SAMPLE_INSTRUCTIONS_EN;
+              const fallbackInstructions = buildFallbackInstructions(videoTitle, SAMPLE_INGREDIENTS);
 
               saveRecipeToDb(SAMPLE_INGREDIENTS, fallbackInstructions).then((savedRecipe) => {
                 const dbIngredients = mergeSavedIngredientIds(SAMPLE_INGREDIENTS, savedRecipe?.ingredients || []);

@@ -1,4 +1,4 @@
-import { getDisplayQuantityWithConversion, getIngredientNutrition } from '../../utils/nutritionEstimator';
+import { getDisplayQuantityWithConversion } from '../../utils/nutritionEstimator';
 import { formatQty, formatUnit } from '../../utils/quantityFormatter';
 
 const getIngredientQuantityText = (ingredient) => {
@@ -7,7 +7,34 @@ const getIngredientQuantityText = (ingredient) => {
   return getDisplayQuantityWithConversion(ingredient.ingredientName || ingredient.name || '', qty, unit);
 };
 
-export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingredients }) {
+const formatDuration = (duration) => {
+  if (!duration) return '';
+
+  if (typeof duration === 'number') {
+    const minutes = Math.max(1, Math.round(duration / 60));
+    return `${minutes} mins`;
+  }
+
+  const value = String(duration).trim();
+  if (!value) return '';
+  if (/^\d+$/.test(value)) {
+    const minutes = Math.max(1, Math.round(Number(value) / 60));
+    return `${minutes} mins`;
+  }
+  if (/^PT/i.test(value)) {
+    const hours = Number(value.match(/(\d+)H/i)?.[1] || 0);
+    const minutes = Number(value.match(/(\d+)M/i)?.[1] || 0);
+    const seconds = Number(value.match(/(\d+)S/i)?.[1] || 0);
+    const totalMinutes = Math.max(1, Math.round(hours * 60 + minutes + seconds / 60));
+    return `${totalMinutes} mins`;
+  }
+  return value;
+};
+
+export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingredients, duration, servings }) {
+  const durationText = formatDuration(duration);
+  const servingsText = servings ? `${servings} ${Number(servings) === 1 ? 'serving' : 'servings'}` : '';
+
   return (
     <aside className="rounded-[22px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(30,34,41,0.05)] lg:sticky lg:top-6">
       <div className="relative overflow-hidden rounded-2xl bg-gray-100">
@@ -30,10 +57,16 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
 
       <div className="mt-4">
         <h2 className="line-clamp-2 text-xl font-black leading-tight text-gray-900">{recipeTitle}</h2>
-        <div className="mt-3 flex items-center gap-4 text-sm font-semibold text-gray-500">
-          <span className="flex items-center gap-1.5"><span className="material-icon !text-base">schedule</span>45 mins</span>
-          <span className="flex items-center gap-1.5"><span className="material-icon !text-base">group</span>4 servings</span>
-        </div>
+        {(durationText || servingsText) && (
+          <div className="mt-3 flex items-center gap-4 text-sm font-semibold text-gray-500">
+            {durationText && (
+              <span className="flex items-center gap-1.5"><span className="material-icon !text-base">schedule</span>{durationText}</span>
+            )}
+            {servingsText && (
+              <span className="flex items-center gap-1.5"><span className="material-icon !text-base">group</span>{servingsText}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-5">
@@ -61,17 +94,10 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
                   </span>
                   <div className="min-w-0">
                     <span className="block truncate text-sm font-black text-gray-800">{ingredient.ingredientName}</span>
-                    <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-400">
-                      {getIngredientQuantityText(ingredient)}
-                    </span>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-xl bg-green-50 px-2 py-1 text-[11px] font-black text-green-700">
-                  {getIngredientNutrition(
-                    ingredient.ingredientName || ingredient.name || '',
-                    ingredient.recipeQuantity || ingredient.quantity || 1,
-                    ingredient.recipeUnit || ingredient.unit || 'pcs'
-                  ).calories} kcal
+                <span className="shrink-0 text-xs font-black text-orange-600">
+                  {getIngredientQuantityText(ingredient)}
                 </span>
               </div>
             ))

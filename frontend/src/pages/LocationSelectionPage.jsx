@@ -95,6 +95,7 @@ export default function LocationSelectionPage() {
           dispatch({ type: 'ADD_ADDRESS', payload: address });
           dispatch({ type: 'SET_SELECTED_ADDRESS', payload: address });
           await refreshAddresses();
+          navigate(nextPath);
         } catch (err) {
           setError(getApiErrorMessage(err, 'Could not save current location.'));
         } finally {
@@ -154,6 +155,50 @@ export default function LocationSelectionPage() {
             </div>
           )}
 
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Saved Locations</h3>
+              <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">
+                {savedAddresses.length} Saved
+              </span>
+            </div>
+            {loadingAddresses ? (
+              <p className="text-sm text-gray-500">Loading saved addresses...</p>
+            ) : savedAddresses.length === 0 ? (
+              <p className="rounded-xl bg-gray-50 px-4 py-5 text-center text-sm text-gray-500">
+                No saved locations yet. Add one below and it will be saved in your account.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {savedAddresses.map((address) => (
+                  <button
+                    key={address.id}
+                    type="button"
+                    onClick={() => selectSavedAddress(address)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
+                      selectedAddressId === address.id
+                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                        : 'border-gray-200 text-gray-600 hover:border-orange-200'
+                    }`}
+                  >
+                    <span className="block text-sm font-medium">{formatAddress(address)}</span>
+                    <span className="block text-xs text-gray-400 mt-1">{address.addressType === 'CURRENT_LOCATION' ? 'Current Location' : 'Manual Address'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedAddressId && (
+              <button onClick={() => navigate(nextPath)} className="gradient-bg text-white py-3.5 rounded-xl font-semibold text-sm hover:opacity-90 active:scale-95 transition-all w-full mt-4 shadow-lg">
+                Continue With Selected Address
+              </button>
+            )}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <h3 className="font-semibold text-gray-900">Add New Location</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Save a current location or enter a manual delivery address.</p>
+          </div>
+
           <button
             disabled={saving}
             onClick={handleCurrent}
@@ -166,42 +211,10 @@ export default function LocationSelectionPage() {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-gray-900">Use Current Location</h3>
-              <p className="text-xs text-gray-500 mt-0.5">{saving ? 'Saving location...' : 'Auto-detect your location for delivery'}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{saving ? 'Saving location...' : 'Auto-detect, save, and continue'}</p>
             </div>
             {useCurrent && <span className="material-icon fill !text-xl text-orange-500">check_circle</span>}
           </button>
-
-          {(loadingAddresses || savedAddresses.length > 0) && (
-            <div className="bg-white border border-gray-200 rounded-2xl p-5">
-              <h3 className="font-semibold text-gray-900 mb-3">Saved Addresses</h3>
-              {loadingAddresses ? (
-                <p className="text-sm text-gray-500">Loading saved addresses...</p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {savedAddresses.map((address) => (
-                    <button
-                      key={address.id}
-                      type="button"
-                      onClick={() => selectSavedAddress(address)}
-                      className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${
-                        selectedAddressId === address.id
-                          ? 'border-orange-500 bg-orange-50 text-orange-700'
-                          : 'border-gray-200 text-gray-600 hover:border-orange-200'
-                      }`}
-                    >
-                      <span className="block text-sm font-medium">{formatAddress(address)}</span>
-                      <span className="block text-xs text-gray-400 mt-1">{address.addressType === 'CURRENT_LOCATION' ? 'Current Location' : 'Manual Address'}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedAddressId && (
-                <button onClick={() => navigate(nextPath)} className="gradient-bg text-white py-3.5 rounded-xl font-semibold text-sm hover:opacity-90 active:scale-95 transition-all w-full mt-4 shadow-lg">
-                  Continue With Selected Address
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="flex items-center gap-4">
             <div className="flex-1 h-px bg-gray-200" />
@@ -232,11 +245,6 @@ export default function LocationSelectionPage() {
             </button>
           </form>
 
-          {useCurrent && (
-            <button onClick={() => navigate(nextPath)} className="gradient-bg text-white py-3.5 rounded-2xl font-semibold text-sm hover:opacity-90 active:scale-95 transition-all w-full shadow-lg">
-              Confirm Location & Continue
-            </button>
-          )}
         </div>
       </div>
       <BottomNav />

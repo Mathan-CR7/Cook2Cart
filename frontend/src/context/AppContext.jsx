@@ -38,8 +38,27 @@ function appReducer(state, action) {
     case 'SET_USER':
       return { ...state, user: action.payload, isAuthenticated: !!action.payload };
 
-    case 'LOGOUT':
-      return { ...state, user: null, isAuthenticated: false };
+    case 'LOGOUT': {
+      const keys = ['extractedIngredients', 'extractedInstructions', 'cart', 'cartObject',
+        'selectedRecipe', 'savedRecipes', 'favoriteRecipes', 'recentRecipes',
+        'addresses', 'selectedAddress'];
+      keys.forEach(k => localStorage.removeItem(k));
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        extractedIngredients: [],
+        extractedInstructions: [],
+        cart: [],
+        cartObject: null,
+        selectedRecipe: null,
+        savedRecipes: [],
+        favoriteRecipes: [],
+        recentRecipes: [],
+        addresses: [],
+        selectedAddress: null,
+      };
+    }
 
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload };
@@ -302,6 +321,18 @@ function appReducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+
+  // Clear stale localStorage data if no token on mount
+  useEffect(() => {
+    if (!localStorage.getItem('token')) {
+      const keys = ['extractedIngredients', 'extractedInstructions', 'cart', 'cartObject',
+        'selectedRecipe', 'savedRecipes', 'favoriteRecipes', 'recentRecipes',
+        'addresses', 'selectedAddress'];
+      keys.forEach(k => {
+        try { localStorage.removeItem(k); } catch (_) { /* ignore */ }
+      });
+    }
+  }, []);
 
   const hydrateAddresses = async () => {
     const res = await addressService.getAddresses();

@@ -1,6 +1,4 @@
-import { formatBaseQuantity, money } from './cartMath';
-import { getDisplayQuantityWithConversion, getIngredientNutrition } from '../../utils/nutritionEstimator';
-import { formatQty, formatUnit } from '../../utils/quantityFormatter';
+import { money } from './cartMath';
 
 export default function CartSummary({
   items,
@@ -11,25 +9,6 @@ export default function CartSummary({
   onCancel,
   disabled,
 }) {
-  const itemNutrition = items.map((item) => {
-    const ingredientName = item.ingredient?.ingredientName || item.name || '';
-    const qty = formatQty(item.ingredient?.recipeQuantity || item.ingredient?.quantity || 1);
-    const unit = formatUnit(item.ingredient?.recipeUnit || item.ingredient?.unit || 'pcs', qty);
-    return {
-      key: item.key,
-      converted: getDisplayQuantityWithConversion(ingredientName, qty, unit),
-      nutrition: getIngredientNutrition(ingredientName, qty, unit),
-    };
-  });
-
-  const nutritionByKey = new Map(itemNutrition.map((item) => [item.key, item]));
-  const totalNutrition = itemNutrition.reduce((total, item) => ({
-    calories: total.calories + Number(item.nutrition.calories || 0),
-    protein: total.protein + Number(item.nutrition.protein || 0),
-    carbohydrates: total.carbohydrates + Number(item.nutrition.carbohydrates || 0),
-    fat: total.fat + Number(item.nutrition.fat || 0),
-  }), { calories: 0, protein: 0, carbohydrates: 0, fat: 0 });
-
   return (
     <aside className="rounded-[22px] border border-gray-200 bg-white p-6 shadow-[0_16px_40px_rgba(30,34,41,0.08)] lg:sticky lg:top-6">
       <div className="flex items-center justify-between">
@@ -66,19 +45,6 @@ export default function CartSummary({
                   <span>Packs: {item.packsNeeded || 1}</span>
                   <span>Usage Cost: {money(item.recipeCost)}</span>
                 </div>
-                {nutritionByKey.get(item.key)?.converted ? (
-                  <div className="mt-1 text-xs font-semibold text-gray-500">
-                    Required: {nutritionByKey.get(item.key).converted}
-                  </div>
-                ) : null}
-                <div className="mt-1 text-xs font-black text-green-700">
-                  {nutritionByKey.get(item.key)?.nutrition.calories || 0} kcal
-                </div>
-                {item.unusedQuantity ? (
-                  <div className="mt-1 text-xs font-medium text-orange-600">
-                    Unused: {formatBaseQuantity(item.unusedQuantity, item.pricing?.required?.type)}
-                  </div>
-                ) : null}
               </div>
             </div>
           ))
@@ -95,43 +61,17 @@ export default function CartSummary({
           <span>Total Recipe Usage Cost</span>
           <span className="font-black text-gray-900">{money(recipeCost)}</span>
         </div>
-        <div className="mt-3 flex justify-between text-sm font-medium text-gray-600">
-          <span>Total Unused Inventory Value</span>
-          <span className="font-black text-orange-600">{money(unusedInventoryValue)}</span>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 p-4">
-        <h3 className="mb-3 text-sm font-black text-gray-900">Recipe Nutrition</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <span className="block text-xs font-bold text-green-700/70">Calories</span>
-            <span className="font-black text-gray-900">{Math.round(totalNutrition.calories)} kcal</span>
-          </div>
-          <div>
-            <span className="block text-xs font-bold text-green-700/70">Protein</span>
-            <span className="font-black text-gray-900">{Math.round(totalNutrition.protein * 10) / 10}g</span>
-          </div>
-          <div>
-            <span className="block text-xs font-bold text-green-700/70">Carbs</span>
-            <span className="font-black text-gray-900">{Math.round(totalNutrition.carbohydrates * 10) / 10}g</span>
-          </div>
-          <div>
-            <span className="block text-xs font-bold text-green-700/70">Fat</span>
-            <span className="font-black text-gray-900">{Math.round(totalNutrition.fat * 10) / 10}g</span>
-          </div>
-        </div>
       </div>
 
       <div className="mt-4 rounded-2xl bg-green-50 p-4">
         <div className="flex gap-3">
-          <span className="material-icon text-green-700">inventory_2</span>
+          <span className="material-icon text-green-700">shopping_cart_checkout</span>
           <div>
             <p className="text-sm font-black text-gray-900">
-              Remaining Inventory <span className="text-green-700">{money(unusedInventoryValue)}</span>
+              Smart Cart Ready
             </p>
             <p className="mt-1 text-xs font-medium leading-relaxed text-gray-600">
-              You are purchasing ingredient packs larger than the recipe requirement. Remaining quantities can be used for future recipes.
+              Confirm the selected products to save this cart in your database.
             </p>
           </div>
         </div>

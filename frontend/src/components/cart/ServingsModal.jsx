@@ -1,15 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-export default function ServingsModal({ open, initialValue = 4, onConfirm }) {
+export default function ServingsModal({ open, initialValue = 4, onConfirm, onClose }) {
   const [persons, setPersons] = useState(initialValue);
+
+  useEffect(() => {
+    setPersons(initialValue);
+  }, [initialValue, open]);
 
   if (!open) return null;
 
   const presets = [1, 2, 4, 6, 8];
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose?.();
+      }}
+    >
+      <div className="relative w-full max-w-md rounded-[24px] bg-white p-6 shadow-2xl">
+        <button
+          type="button"
+          aria-label="Close servings modal"
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 text-gray-500 transition hover:bg-orange-50 hover:text-orange-600"
+        >
+          <span className="material-icon !text-xl">close</span>
+        </button>
         <div className="text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
             <span className="material-icon !text-3xl">groups</span>

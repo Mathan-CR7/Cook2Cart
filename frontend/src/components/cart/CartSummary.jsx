@@ -1,4 +1,4 @@
-import { money } from './cartMath';
+                import { money } from './cartMath';
 
 export default function CartSummary({
   items,
@@ -10,21 +10,21 @@ export default function CartSummary({
   disabled,
 }) {
   return (
-    <aside className="rounded-[22px] border border-gray-200 bg-white p-6 shadow-[0_16px_40px_rgba(30,34,41,0.08)] lg:sticky lg:top-6">
-      <div className="flex items-center justify-between">
+    <aside className="flex h-full min-h-0 flex-col rounded-[22px] border border-gray-200 bg-white p-6 shadow-[0_16px_40px_rgba(30,34,41,0.08)]">
+      <div className="flex shrink-0 items-center justify-between">
         <h2 className="text-xl font-black text-gray-900">Cart Summary</h2>
         <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-black text-green-700">
           {items.length} Items
         </span>
       </div>
 
-      <div className="mt-5 max-h-[42vh] space-y-3 overflow-y-auto pr-1">
+      <div className="mt-5 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {items.length === 0 ? (
           <p className="rounded-2xl bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">Select products to build your cart.</p>
         ) : (
           items.map((item) => (
-            <div key={item.key} className="flex gap-3 border-b border-gray-100 pb-3 last:border-0">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+            <div key={item.key} className="flex gap-3 border-b border-gray-100 pb-2 last:border-0">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
                 {item.product?.imageUrl ? (
                   <img src={item.product.imageUrl} alt={item.name} className="h-full w-full object-cover" />
                 ) : (
@@ -41,9 +41,9 @@ export default function CartSummary({
                   </div>
                   <span className="shrink-0 text-sm font-black text-gray-900">{money(item.purchaseCost)}</span>
                 </div>
-                <div className="mt-2 flex justify-between text-xs font-medium text-gray-500">
+                <div className="mt-2 flex flex-wrap justify-between gap-x-2 gap-y-1 text-xs font-medium text-gray-500">
                   <span>Packs: {item.packsNeeded || 1}</span>
-                  <span>Usage Cost: {money(item.recipeCost)}</span>
+                  <span className="text-right">Usage Cost: {money(item.recipeCost)}</span>
                 </div>
               </div>
             </div>
@@ -51,7 +51,7 @@ export default function CartSummary({
         )}
       </div>
 
-      <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+      <div className="mt-4 shrink-0 rounded-2xl border border-gray-100 bg-gray-50 p-4">
         <h3 className="mb-3 text-sm font-black text-gray-900">Price Summary</h3>
         <div className="flex justify-between text-sm font-medium text-gray-600">
           <span>Total Purchase Cost</span>
@@ -63,7 +63,7 @@ export default function CartSummary({
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl bg-green-50 p-4">
+      <div className="mt-4 shrink-0 rounded-2xl bg-green-50 p-4">
         <div className="flex gap-3">
           <span className="material-icon text-green-700">shopping_cart_checkout</span>
           <div>
@@ -77,7 +77,7 @@ export default function CartSummary({
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3">
+      <div className="mt-4 flex shrink-0 flex-col gap-3">
         <button
           type="button"
           disabled={disabled || items.length === 0}
@@ -96,7 +96,7 @@ export default function CartSummary({
         </button>
       </div>
 
-      <p className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-gray-400">
+      <p className="mt-4 flex shrink-0 items-center justify-center gap-2 text-xs font-medium text-gray-400">
         <span className="material-icon !text-sm">lock</span>
         Your location and cart are secure
       </p>

@@ -3,9 +3,24 @@ import { addressService, authService, recipeCatalogService, videoCatalogService 
 
 const AppContext = createContext();
 
+const normalizeIngredient = (ingredient = {}) => {
+  const ingredientName = ingredient.ingredientName || ingredient.name || 'Ingredient';
+
+  return {
+    ...ingredient,
+    name: ingredient.name || ingredientName,
+    ingredientName,
+    recipeQuantity: ingredient.recipeQuantity ?? ingredient.quantity ?? '',
+    recipeUnit: ingredient.recipeUnit ?? ingredient.unit ?? 'pcs',
+    quantity: ingredient.quantity ?? ingredient.recipeQuantity ?? '',
+    unit: ingredient.unit ?? ingredient.recipeUnit ?? 'pcs',
+  };
+};
+
 const initialState = {
   user: null,
   isAuthenticated: false,
+  authChecked: false,
   theme: localStorage.getItem('theme') || 'light',
   searchQuery: '',
   searchResults: [],
@@ -36,7 +51,10 @@ function appReducer(state, action) {
       return { ...state, theme: action.payload };
 
     case 'SET_USER':
-      return { ...state, user: action.payload, isAuthenticated: !!action.payload };
+      return { ...state, user: action.payload, isAuthenticated: !!action.payload, authChecked: true };
+
+    case 'SET_AUTH_CHECKED':
+      return { ...state, authChecked: true };
 
     case 'LOGOUT': {
       const keys = ['extractedIngredients', 'extractedInstructions', 'cart', 'cartObject',
@@ -47,6 +65,7 @@ function appReducer(state, action) {
         ...state,
         user: null,
         isAuthenticated: false,
+        authChecked: true,
         extractedIngredients: [],
         extractedInstructions: [],
         cart: [],
@@ -88,10 +107,11 @@ function appReducer(state, action) {
       const seenNames = new Set();
       if (Array.isArray(rawIngredients)) {
         for (const ing of rawIngredients) {
-          const name = (ing.name || ing.ingredientName || '').trim().toLowerCase();
+          const normalized = normalizeIngredient(ing);
+          const name = (normalized.ingredientName || '').trim().toLowerCase();
           if (name && !seenNames.has(name)) {
             seenNames.add(name);
-            uniqueIngredients.push(ing);
+            uniqueIngredients.push(normalized);
           }
         }
       }
@@ -122,16 +142,17 @@ function appReducer(state, action) {
 
     case 'ADD_INGREDIENT': {
       const newIng = action.payload;
-      const normalizedName = (newIng.name || '').trim().toLowerCase();
+      const normalizedIngredient = normalizeIngredient(newIng);
+      const normalizedName = (normalizedIngredient.ingredientName || '').trim().toLowerCase();
       const exists = state.extractedIngredients.some(
-        (ing) => (ing.name || '').trim().toLowerCase() === normalizedName
+        (ing) => (ing.ingredientName || ing.name || '').trim().toLowerCase() === normalizedName
       );
       if (exists) {
         return state;
       }
       return {
         ...state,
-        extractedIngredients: [...state.extractedIngredients, newIng],
+        extractedIngredients: [...state.extractedIngredients, normalizedIngredient],
       };
     }
 
@@ -387,23 +408,27 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
-      authService.getProfile()
-        .then((res) => {
-          dispatch({ type: 'SET_USER', payload: res.data });
-          if (res.data?.id) {
-            hydrateVideoActions(res.data.id).catch((err) => {
-              console.error('Failed to load saved video actions:', err);
-            });
-          }
-          hydrateAddresses().catch((err) => {
-            console.error('Failed to load saved addresses:', err);
-          });
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-        });
+    if (!token) {
+      dispatch({ type: 'SET_AUTH_CHECKED' });
+      return;
     }
+
+    authService.getProfile()
+      .then((res) => {
+        dispatch({ type: 'SET_USER', payload: res.data });
+        if (res.data?.id) {
+          hydrateVideoActions(res.data.id).catch((err) => {
+            console.error('Failed to load saved video actions:', err);
+          });
+        }
+        hydrateAddresses().catch((err) => {
+          console.error('Failed to load saved addresses:', err);
+        });
+      })
+      .catch(() => {
+        localStorage.removeItem('token');
+        dispatch({ type: 'SET_AUTH_CHECKED' });
+      });
   }, [dispatch]);
 
   useEffect(() => {

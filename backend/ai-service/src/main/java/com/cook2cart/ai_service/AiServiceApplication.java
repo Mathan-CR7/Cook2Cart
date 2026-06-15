@@ -9,9 +9,7 @@ import org.springframework.kafka.annotation.EnableKafka;
 @EnableKafka
 @SpringBootApplication
 public class AiServiceApplication {
-
 	public static void main(String[] args) {
 		SpringApplication.run(AiServiceApplication.class, args);
 	}
-
 }

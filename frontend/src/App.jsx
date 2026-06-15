@@ -11,6 +11,7 @@ import LocationSelectionPage from './pages/LocationSelectionPage';
 import OrderSummaryPage from './pages/OrderSummaryPage';
 import UserProfilePage from './pages/UserProfilePage';
 import FavoritesPage from './pages/FavoritesPage';
+import RecipesPage from './pages/RecipesPage';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/order/:videoId" element={<ProtectedRoute><OrderSummaryPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
           <Route path="/favorites" element={<ProtectedRoute><FavoritesPage /></ProtectedRoute>} />
+          <Route path="/recipes" element={<ProtectedRoute><RecipesPage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AppProvider>

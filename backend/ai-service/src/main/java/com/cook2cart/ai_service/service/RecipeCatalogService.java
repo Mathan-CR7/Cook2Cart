@@ -4,19 +4,30 @@ import com.cook2cart.ai_service.dto.*;
 import com.cook2cart.ai_service.entity.*;
 import com.cook2cart.ai_service.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RecipeCatalogService {
 
+    private static final Duration USER_RECIPES_CACHE_TTL = Duration.ofHours(6);
+    private static final String USER_RECIPES_CACHE_PREFIX = "recipes:user:";
+
     private final RecipeRepository recipeRepository;
     private final IngredientRepository ingredientRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Transactional
     public RecipeDTO createRecipe(RecipeCreateRequest request) {
@@ -64,12 +75,31 @@ public class RecipeCatalogService {
             }
         }
 
-        return toRecipeDTO(recipeRepository.save(recipe));
+        RecipeDTO savedRecipe = toRecipeDTO(recipeRepository.save(recipe));
+        evictUserRecipesCache(request.userId());
+        return savedRecipe;
     }
 
     @Transactional(readOnly = true)
     public List<RecipeDTO> getRecipesByUser(Long userId) {
-        return recipeRepository.findByUserId(userId).stream().map(this::toRecipeDTO).toList();
+        String cacheKey = buildUserRecipesCacheKey(userId);
+        List<RecipeDTO> cachedRecipes = readUserRecipesFromCache(cacheKey, userId);
+
+        if (cachedRecipes != null) {
+            return cachedRecipes;
+        }
+
+        log.info("CACHE MISS - Loading processed recipes from database for userId: {}", userId);
+
+        List<RecipeDTO> recipes = deduplicateRecipes(
+                recipeRepository.findByUserId(userId).stream()
+                        .sorted(Comparator.comparing(Recipe::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                        .map(this::toRecipeDTO)
+                        .toList()
+        );
+
+        cacheUserRecipes(cacheKey, userId, recipes);
+        return recipes;
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +144,72 @@ public class RecipeCatalogService {
         return rawName.trim()
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
+    }
+
+    private List<RecipeDTO> deduplicateRecipes(List<RecipeDTO> recipes) {
+        Map<String, RecipeDTO> uniqueRecipes = new LinkedHashMap<>();
+
+        for (RecipeDTO recipe : recipes) {
+            String key = recipe.videoId() != null
+                    ? "video:" + recipe.videoId()
+                    : "name:" + normalizeRecipeName(recipe.recipeName());
+
+            uniqueRecipes.putIfAbsent(key, recipe);
+        }
+
+        return uniqueRecipes.values().stream().toList();
+    }
+
+    private String normalizeRecipeName(String name) {
+        if (name == null || name.isBlank()) {
+            return "recipe";
+        }
+
+        return name.trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private String buildUserRecipesCacheKey(Long userId) {
+        return USER_RECIPES_CACHE_PREFIX + userId;
+    }
+
+    private void evictUserRecipesCache(Long userId) {
+        if (userId == null) {
+            return;
+        }
+
+        try {
+            redisTemplate.delete(buildUserRecipesCacheKey(userId));
+            log.info("Evicted processed recipes Redis cache for userId: {}", userId);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache eviction skipped for userId {}: {}", userId, ex.getMessage());
+        }
+    }
+
+    private List<RecipeDTO> readUserRecipesFromCache(String cacheKey, Long userId) {
+        try {
+            Object cachedRecipes = redisTemplate.opsForValue().get(cacheKey);
+
+            if (cachedRecipes instanceof List<?> cachedList && cachedList.stream().allMatch(RecipeDTO.class::isInstance)) {
+                log.info("CACHE HIT - Returning processed recipes from Redis for userId: {}", userId);
+                return cachedList.stream()
+                        .map(RecipeDTO.class::cast)
+                        .toList();
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache read skipped for userId {}: {}", userId, ex.getMessage());
+        }
+
+        return null;
+    }
+
+    private void cacheUserRecipes(String cacheKey, Long userId, List<RecipeDTO> recipes) {
+        try {
+            redisTemplate.opsForValue().set(cacheKey, recipes, USER_RECIPES_CACHE_TTL);
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache write skipped for userId {}: {}", userId, ex.getMessage());
+        }
     }
 
     private RecipeDTO toRecipeDTO(Recipe recipe) {

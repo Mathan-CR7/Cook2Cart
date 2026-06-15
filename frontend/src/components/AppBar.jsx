@@ -7,6 +7,7 @@ import LogoIcon from './LogoIcon';
 const NAV_ITEMS = [
   { path: '/', label: 'Home', icon: 'home' },
   { path: '/search', label: 'Search Videos', icon: 'search' },
+  { path: '/recipes', label: 'Recipes', icon: 'restaurant_menu' },
   { path: '/cart', label: 'Shopping List', icon: 'shopping_cart' },
   { path: '/favorites', label: 'Saved Video', icon: 'bookmark' },
 ];
@@ -29,6 +30,11 @@ export default function AppBar() {
     dispatch({ type: 'LOGOUT' });
     navigate('/');
     setMenuOpen(false);
+  };
+
+  const isActivePath = (path) => {
+    if (path === '/') return pathname === '/';
+    return pathname === path || pathname.startsWith(`${path}/`);
   };
 
   return (
@@ -69,7 +75,7 @@ export default function AppBar() {
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-1.5">
               {NAV_ITEMS.map((item) => {
-                const isActive = pathname === item.path;
+                const isActive = isActivePath(item.path);
                 return (
                   <Link
                     key={item.path}
@@ -162,7 +168,7 @@ export default function AppBar() {
             >
               <div className="px-4 py-3 flex flex-col gap-1 bg-white">
                 {NAV_ITEMS.map((item) => {
-                  const isActive = pathname === item.path;
+                  const isActive = isActivePath(item.path);
                   return (
                     <Link
                       key={item.path}

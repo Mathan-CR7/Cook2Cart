@@ -18,7 +18,10 @@ import { formatQty, formatUnit } from '../../utils/quantityFormatter';
 
 const productKey = (product) => String(product?.id || product?.barcode || product?.productName || '');
 
+const hasWeightUnitText = (value = '') => /\b(kg|kilogram|kilograms|g|gram|grams)\b/i.test(String(value));
+
 export default function IngredientProductCard({
+  cardId,
   ingredient,
   products,
   selectedProductKey,
@@ -37,33 +40,40 @@ export default function IngredientProductCard({
   );
 
   if (!products.length) {
+    const ingredientName = ingredient.ingredientName || ingredient.name || 'Ingredient';
     return (
       <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-black text-gray-900">{ingredient.ingredientName}</h3>
+        <h3 className="text-sm font-black text-gray-900">{ingredientName}</h3>
         <p className="mt-1 text-xs text-gray-500">No product suggestions found.</p>
       </section>
     );
   }
 
+  const ingredientName = ingredient.ingredientName || ingredient.name || 'Ingredient';
   const required = displayQty(ingredient);
-  const requiredQty = formatQty(ingredient.recipeQuantity || ingredient.quantity || '');
+  const requiredQty = formatQty(ingredient.recipeQuantity ?? ingredient.quantity ?? '');
   const requiredUnit = formatUnit(ingredient.recipeUnit || ingredient.unit || 'pcs', requiredQty);
-  const convertedRequired = getDisplayQuantityWithConversion(ingredient.ingredientName, requiredQty, requiredUnit);
-  const nutrition = getIngredientNutrition(ingredient.ingredientName, requiredQty || 1, requiredUnit);
+  const convertedRequired = getDisplayQuantityWithConversion(ingredientName, requiredQty, requiredUnit);
+  const nutrition = getIngredientNutrition(ingredientName, requiredQty || 1, requiredUnit);
   const packSize = getPackSize(selectedProduct);
   const packPrice = getProductPrice(selectedProduct);
   const marketProduct = isMarketProduct(selectedProduct);
   const selectedVegOption = vegetableOptions.find((option) => option.label === vegetableOption) || vegetableOptions[0];
   const pricing = calculateProductPricing(ingredient, selectedProduct, selectedVegOption);
   const requiredBaseText = pricing.required ? formatBaseQuantity(pricing.required.value, pricing.required.type) : required;
-  const effectivePack = getEffectivePackQuantity(selectedProduct, ingredient.ingredientName);
+  const effectivePack = getEffectivePackQuantity(selectedProduct, ingredientName);
   const effectivePackText = effectivePack ? formatBaseQuantity(effectivePack.value, effectivePack.type) : '';
   const packBaseText = pricing.pack ? formatBaseQuantity(pricing.pack.value, pricing.pack.type) : effectivePackText || packSize;
-  const packDetailText = effectivePackText && effectivePackText !== packSize ? `${packSize} (${effectivePackText})` : packSize;
+  const shouldShowConvertedPackOnly = pricing.pack?.type === 'volume' && hasWeightUnitText(packSize);
+  const packDetailText = shouldShowConvertedPackOnly
+    ? packBaseText
+    : effectivePackText && effectivePackText !== packSize
+      ? `${packSize} (${effectivePackText})`
+      : packSize;
   const totalPackQuantity = pricing.pack?.value ? pricing.pack.value * (pricing.packsNeeded || 1) : 0;
 
   return (
-    <section className={`rounded-[18px] border bg-white p-3.5 shadow-[0_8px_24px_rgba(30,34,41,0.04)] transition hover:border-orange-200 ${
+    <section id={cardId} className={`scroll-mt-3 rounded-[18px] border bg-white p-3.5 shadow-[0_8px_24px_rgba(30,34,41,0.04)] transition hover:border-orange-200 ${
       atHome ? 'border-green-200 bg-green-50/30' : 'border-gray-200'
     }`}>
       <div className="mb-3 flex items-start justify-between gap-3 px-1">
@@ -72,7 +82,7 @@ export default function IngredientProductCard({
             <span className="material-icon !text-xl">restaurant</span>
           </span>
           <div>
-            <h3 className="text-lg font-black leading-tight text-gray-900">{ingredient.ingredientName}</h3>
+            <h3 className="text-lg font-black leading-tight text-gray-900">{ingredientName}</h3>
             <p className="mt-0.5 text-sm font-medium text-gray-500">
               Required: <span className="font-black text-orange-600">{required || 'As needed'}</span>
             </p>
@@ -89,15 +99,15 @@ export default function IngredientProductCard({
       </div>
 
       <div className="rounded-2xl border border-gray-100 bg-white p-3">
-        <div className="grid gap-4 lg:grid-cols-[150px_minmax(0,1fr)_140px_135px] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[120px_minmax(0,1fr)_115px_125px] xl:grid-cols-[140px_minmax(0,1fr)_125px_130px] lg:items-center">
           <div className="flex items-center justify-center rounded-xl border border-gray-100 bg-gray-50 p-2">
-            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-white">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white xl:h-24 xl:w-24">
               <img
-                src={getProductImageUrl(selectedProduct, ingredient.ingredientName)}
+                src={getProductImageUrl(selectedProduct, ingredientName)}
                 alt={selectedProduct.productName}
                 className="h-full w-full object-cover"
                 onError={(event) => {
-                  event.currentTarget.src = getProductImageUrl(null, ingredient.ingredientName);
+                  event.currentTarget.src = getProductImageUrl(null, ingredientName);
                 }}
               />
             </div>
@@ -117,7 +127,7 @@ export default function IngredientProductCard({
 
           <div className="rounded-2xl bg-white px-2">
             <p className="text-xs font-semibold text-gray-500">{marketProduct ? 'Market Price' : 'One Pack Price'}</p>
-            <p className="mt-1 text-2xl font-black text-orange-600">{money(packPrice)}</p>
+            <p className="mt-1 text-xl font-black text-orange-600 xl:text-2xl">{money(packPrice)}</p>
             {!marketProduct && pricing.pack?.value ? (
               <p className="mt-1 text-xs font-medium text-gray-500">Pack: {packBaseText}</p>
             ) : null}
@@ -217,7 +227,7 @@ export default function IngredientProductCard({
             {pricing.warningType === 'unknown-pack'
               ? `Pack size is unclear for this product, so recipe usage cost cannot be estimated accurately. Choose another brand or pack.`
               : pricing.warningType === 'multi-pack'
-              ? `This recipe requires ${requiredBaseText} ${ingredient.ingredientName}. One pack contains only ${packSize}. You need ${pricing.packsNeeded} packs.`
+              ? `This recipe requires ${requiredBaseText} ${ingredientName}. One pack contains only ${packSize}. You need ${pricing.packsNeeded} packs.`
               : `Smallest available pack is ${packDetailText}. You will buy ${packSize} and use ${requiredBaseText}.`}
           </p>
           <div className="flex flex-wrap gap-2">

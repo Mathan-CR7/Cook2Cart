@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import RecipeSidebar from './RecipeSidebar';
 import IngredientProductCard from './IngredientProductCard';
 import CartSummary from './CartSummary';
@@ -37,30 +38,85 @@ export default function CartGenerationPage({
   onCloseConfirm,
   onConfirm,
 }) {
+  const productsListRef = useRef(null);
+  const [activeIngredientId, setActiveIngredientId] = useState(null);
+
+  useEffect(() => {
+    if (suggestionGroups.length > 0 && !activeIngredientId) {
+      setActiveIngredientId(suggestionGroups[0].recipeIngredientId);
+    }
+  }, [suggestionGroups, activeIngredientId]);
+
+  const updateActiveIngredientFromScroll = () => {
+    const container = productsListRef.current;
+
+    if (!container || suggestionGroups.length === 0) return;
+
+    const containerTop = container.getBoundingClientRect().top;
+    let nearestGroup = suggestionGroups[0];
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    suggestionGroups.forEach((group) => {
+      const card = document.getElementById(`product-card-${group.recipeIngredientId}`);
+      if (!card) return;
+
+      const distance = Math.abs(card.getBoundingClientRect().top - containerTop);
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestGroup = group;
+      }
+    });
+
+    setActiveIngredientId(nearestGroup.recipeIngredientId);
+  };
+
+  const handleFocusIngredient = (ingredient) => {
+    const match = suggestionGroups.find((group) => {
+      const ingredientId = ingredient.recipeIngredientId || ingredient.id;
+      const idMatch = String(group.recipeIngredientId || '') === String(ingredientId || '');
+      const nameMatch = String(group.ingredientName || '').trim().toLowerCase()
+        === String(ingredient.ingredientName || ingredient.name || '').trim().toLowerCase();
+
+      return idMatch || nameMatch;
+    });
+    const ingredientId = match?.recipeIngredientId || ingredient.recipeIngredientId || ingredient.id || ingredient.ingredientName;
+    const target = document.getElementById(`product-card-${ingredientId}`);
+
+    if (!target) return;
+
+    setActiveIngredientId(ingredientId);
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const activeIngredient = suggestionGroups.find(
+    (group) => String(group.recipeIngredientId) === String(activeIngredientId)
+  );
+
   return (
-    <main className="relative z-10 mx-auto w-full max-w-[1780px] px-6 pt-28 sm:px-8 lg:px-10 2xl:px-14">
+    <main className="relative z-10 mx-auto w-full max-w-[1680px] px-4 pt-28 sm:px-6 lg:px-8 2xl:px-10">
       <header className="mb-6 rounded-[22px] border border-orange-100 bg-white/85 px-4 py-4 shadow-sm backdrop-blur-xl">
         <div className="grid gap-4 xl:grid-cols-[1fr_300px] xl:items-center">
           <div className="hidden items-center justify-center md:flex">
-          {steps.map((step, index) => {
-            const done = index < steps.length - 1;
-            const active = index === steps.length - 1;
-            return (
-              <div key={step} className="flex min-w-0 flex-1 items-center last:flex-none">
-                <div className="flex min-w-[120px] flex-col items-center gap-1">
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black text-white shadow-sm ${
-                    active ? 'bg-orange-500' : done ? 'bg-green-700' : 'bg-gray-300'
-                  }`}>
-                    {done ? <span className="material-icon !text-lg">check</span> : index + 1}
-                  </span>
-                  <span className={`text-xs font-semibold ${active ? 'text-orange-600' : 'text-gray-700'}`}>{step}</span>
+            {steps.map((step, index) => {
+              const done = index < steps.length - 1;
+              const active = index === steps.length - 1;
+              return (
+                <div key={step} className="flex min-w-0 flex-1 items-center last:flex-none">
+                  <div className="flex min-w-[120px] flex-col items-center gap-1">
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black text-white shadow-sm ${
+                      active ? 'bg-orange-500' : done ? 'bg-green-700' : 'bg-gray-300'
+                    }`}>
+                      {done ? <span className="material-icon !text-lg">check</span> : index + 1}
+                    </span>
+                    <span className={`text-xs font-semibold ${active ? 'text-orange-600' : 'text-gray-700'}`}>{step}</span>
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div className={`mx-2 h-0.5 flex-1 ${index < steps.length - 2 ? 'bg-green-700' : 'bg-orange-500'}`} />
+                  )}
                 </div>
-                {index < steps.length - 1 && (
-                  <div className={`mx-2 h-0.5 flex-1 ${index < steps.length - 2 ? 'bg-green-700' : 'bg-orange-500'}`} />
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
 
           <div className="flex justify-start xl:justify-end">
@@ -75,17 +131,17 @@ export default function CartGenerationPage({
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2 md:hidden">
-            {steps.map((step, index) => (
-              <div key={step} className="flex items-center gap-3 rounded-2xl bg-orange-50 px-3 py-2.5">
-                <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${
-                  index === steps.length - 1 ? 'bg-orange-500 text-white' : 'bg-green-500 text-white'
-                }`}>
-                  {index + 1}
-                </span>
-                <span className="text-xs font-black text-gray-800">{step}</span>
-              </div>
-            ))}
-          </div>
+          {steps.map((step, index) => (
+            <div key={step} className="flex items-center gap-3 rounded-2xl bg-orange-50 px-3 py-2.5">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black ${
+                index === steps.length - 1 ? 'bg-orange-500 text-white' : 'bg-green-500 text-white'
+              }`}>
+                {index + 1}
+              </span>
+              <span className="text-xs font-black text-gray-800">{step}</span>
+            </div>
+          ))}
+        </div>
       </header>
 
       {error && (
@@ -94,7 +150,7 @@ export default function CartGenerationPage({
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[360px_minmax(620px,1fr)_390px] xl:grid-cols-[390px_minmax(720px,1fr)_410px] 2xl:grid-cols-[420px_minmax(820px,1fr)_430px] lg:items-start">
+      <div className="grid gap-5 lg:h-[calc(100vh-190px)] lg:grid-cols-[300px_minmax(0,1fr)_320px] lg:items-stretch lg:overflow-hidden xl:grid-cols-[340px_minmax(0,1fr)_360px] 2xl:grid-cols-[390px_minmax(0,1fr)_410px]">
         <RecipeSidebar
           thumbnail={thumbnail}
           recipeTitle={recipeTitle}
@@ -102,10 +158,13 @@ export default function CartGenerationPage({
           duration={duration}
           servings={servings}
           ingredients={ingredients}
+          onSelectIngredient={handleFocusIngredient}
+          activeIngredientId={activeIngredientId}
+          activeIngredientName={activeIngredient?.ingredientName}
         />
 
-        <section className="min-w-0">
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-[22px] border border-gray-200 bg-white px-6 py-5 shadow-sm">
+        <section className="flex min-h-0 min-w-0 flex-col">
+          <div className="mb-4 flex shrink-0 items-center justify-between gap-3 rounded-[22px] border border-gray-200 bg-white px-6 py-5 shadow-sm">
             <div>
               <h1 className="text-2xl font-black text-gray-900">Choose Products</h1>
               <p className="mt-1 text-sm font-medium text-gray-500">Select the best products for your recipe ingredients.</p>
@@ -122,10 +181,15 @@ export default function CartGenerationPage({
               <p className="mt-3 text-sm font-bold text-gray-600">Loading product suggestions...</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div
+              ref={productsListRef}
+              onScroll={updateActiveIngredientFromScroll}
+              className="min-h-0 flex-1 scroll-smooth space-y-3 overflow-y-auto pr-2"
+            >
               {suggestionGroups.map((group) => (
                 <IngredientProductCard
                   key={group.recipeIngredientId}
+                  cardId={`product-card-${group.recipeIngredientId}`}
                   ingredient={getIngredientQuantity(group)}
                   products={group.suggestions || []}
                   selectedProductKey={selectedProducts[group.recipeIngredientId]}

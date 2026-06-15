@@ -2,9 +2,10 @@ import { getDisplayQuantityWithConversion } from '../../utils/nutritionEstimator
 import { formatQty, formatUnit } from '../../utils/quantityFormatter';
 
 const getIngredientQuantityText = (ingredient) => {
-  const qty = formatQty(ingredient.recipeQuantity || ingredient.quantity || '');
+  const ingredientName = ingredient.ingredientName || ingredient.name || 'Ingredient';
+  const qty = formatQty(ingredient.recipeQuantity ?? ingredient.quantity ?? '');
   const unit = formatUnit(ingredient.recipeUnit || ingredient.unit || 'pcs', qty);
-  return getDisplayQuantityWithConversion(ingredient.ingredientName || ingredient.name || '', qty, unit);
+  return getDisplayQuantityWithConversion(ingredientName, qty, unit);
 };
 
 const formatDuration = (duration) => {
@@ -31,13 +32,25 @@ const formatDuration = (duration) => {
   return value;
 };
 
-export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingredients, duration, servings }) {
+const normalizeName = (value = '') => String(value).trim().toLowerCase();
+
+export default function RecipeSidebar({
+  thumbnail,
+  recipeTitle,
+  recipeId,
+  ingredients,
+  duration,
+  servings,
+  onSelectIngredient,
+  activeIngredientId,
+  activeIngredientName,
+}) {
   const durationText = formatDuration(duration);
   const servingsText = servings ? `${servings} ${Number(servings) === 1 ? 'serving' : 'servings'}` : '';
 
   return (
-    <aside className="rounded-[22px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(30,34,41,0.05)] lg:sticky lg:top-6">
-      <div className="relative overflow-hidden rounded-2xl bg-gray-100">
+    <aside className="flex h-full min-h-0 flex-col rounded-[22px] border border-gray-200 bg-white p-5 shadow-[0_10px_30px_rgba(30,34,41,0.05)]">
+      <div className="relative shrink-0 overflow-hidden rounded-2xl bg-gray-100">
         {thumbnail ? (
           <img src={thumbnail} alt={recipeTitle} className="h-52 w-full object-cover" />
         ) : (
@@ -55,7 +68,7 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 shrink-0">
         <h2 className="line-clamp-2 text-xl font-black leading-tight text-gray-900">{recipeTitle}</h2>
         {(durationText || servingsText) && (
           <div className="mt-3 flex items-center gap-4 text-sm font-semibold text-gray-500">
@@ -69,7 +82,7 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
         )}
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 flex min-h-0 flex-1 flex-col">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-black text-gray-900">Extracted Ingredients</h3>
           <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-black text-green-700">
@@ -77,15 +90,25 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
           </span>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-gray-100">
+        <div className="min-h-0 overflow-hidden rounded-2xl border border-gray-100">
           {ingredients.length === 0 ? (
             <p className="rounded-2xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">No ingredients loaded.</p>
           ) : (
-            ingredients.map((ingredient, index) => (
-              <div
-                key={ingredient.recipeIngredientId || ingredient.ingredientName}
-                className={`flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-3 last:border-0 ${
-                  index === 0 ? 'bg-orange-50/80' : 'bg-white'
+            <div className="max-h-full overflow-y-auto">
+              {ingredients.map((ingredient) => {
+                const ingredientId = ingredient.recipeIngredientId || ingredient.id;
+                const ingredientName = ingredient.ingredientName || ingredient.name || 'Ingredient';
+                const isActive =
+                  String(ingredientId || '') === String(activeIngredientId || '') ||
+                  normalizeName(ingredientName) === normalizeName(activeIngredientName);
+
+                return (
+              <button
+                type="button"
+                key={ingredient.recipeIngredientId || ingredient.id || ingredientName}
+                onClick={() => onSelectIngredient?.(ingredient)}
+                className={`flex w-full items-center justify-between gap-3 border-b border-gray-100 px-3 py-3 text-left transition last:border-0 hover:bg-orange-50 ${
+                  isActive ? 'bg-orange-50 shadow-[inset_3px_0_0_#ff6b35]' : 'bg-white'
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -93,19 +116,21 @@ export default function RecipeSidebar({ thumbnail, recipeTitle, recipeId, ingred
                     <span className="material-icon !text-lg">restaurant</span>
                   </span>
                   <div className="min-w-0">
-                    <span className="block truncate text-sm font-black text-gray-800">{ingredient.ingredientName}</span>
+                    <span className="block truncate text-sm font-black text-gray-800">{ingredientName}</span>
                   </div>
                 </div>
                 <span className="shrink-0 text-xs font-black text-orange-600">
                   {getIngredientQuantityText(ingredient)}
                 </span>
-              </div>
-            ))
+              </button>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl bg-orange-50 px-4 py-4">
+      <div className="mt-4 shrink-0 rounded-2xl bg-orange-50 px-4 py-4">
         <div className="flex gap-3">
           <span className="material-icon text-yellow-500">lightbulb</span>
           <div>

@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -206,6 +207,9 @@ public class GeminiRecipeService implements RecipeService {
                 return getFallbackResponse(audioFile);
             }
 
+        } catch (HttpClientErrorException.Unauthorized e) {
+            log.error("Gemini API rejected the configured API key. Check gemini.api.key in application.properties.");
+            throw new RuntimeException("Gemini API key is invalid or unauthorized. Please update gemini.api.key and restart ai-service.", e);
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("cooking")) {
             }

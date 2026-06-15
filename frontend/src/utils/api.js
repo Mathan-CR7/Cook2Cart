@@ -78,7 +78,13 @@ export const aiService = {
 };
 
 export const recipeCatalogService = {
-  createRecipe: (data) => api.post('/api/recipes', data),
+  createRecipe: async (data) => {
+    const response = await api.post('/api/recipes', data);
+    if (data?.userId) {
+      sessionStorage.removeItem(`recipes:user:${data.userId}`);
+    }
+    return response;
+  },
   getRecipesByUser: (userId) => api.get(`/api/recipes/user/${userId}`),
   getLatestRecipeByVideo: (videoId) => api.get(`/api/recipes/video/${videoId}`),
   getRecipeIngredients: (recipeId) => api.get(`/api/recipes/${recipeId}/ingredients`),

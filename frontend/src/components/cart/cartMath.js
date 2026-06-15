@@ -261,9 +261,18 @@ export const toBaseQuantity = (quantity, unit, ingredientName = '') => {
   }
 
   const normalized = normalizeUnit(unit, ingredientName);
+  const baseValue = parsed * normalized.factor;
+  const density = getDensityGramsPerMl(ingredientName);
+
+  if (density && normalized.type === 'weight') {
+    return {
+      value: baseValue / density,
+      type: 'volume',
+    };
+  }
 
   return {
-    value: parsed * normalized.factor,
+    value: baseValue,
     type: normalized.type,
   };
 };
@@ -280,8 +289,8 @@ const decodeProductText = (value = '') =>
     .trim()
     .toLowerCase();
 
-const buildPackCandidate = (quantity, unit, multiplier = 1) => {
-  const base = toBaseQuantity(quantity, unit);
+const buildPackCandidate = (quantity, unit, multiplier = 1, ingredientName = '') => {
+  const base = toBaseQuantity(quantity, unit, ingredientName);
   const count = Number(multiplier);
 
   if (!base || !Number.isFinite(count) || count <= 0) return null;
@@ -292,7 +301,7 @@ const buildPackCandidate = (quantity, unit, multiplier = 1) => {
   };
 };
 
-export const parsePackQuantity = (packText = '') => {
+export const parsePackQuantity = (packText = '', ingredientName = '') => {
   const text = decodeProductText(packText);
   const candidates = [];
 
@@ -304,7 +313,7 @@ export const parsePackQuantity = (packText = '') => {
   );
 
   for (const match of text.matchAll(metricThenCount)) {
-    const candidate = buildPackCandidate(match[1], match[2], match[3]);
+    const candidate = buildPackCandidate(match[1], match[2], match[3], ingredientName);
     if (candidate) candidates.push(candidate);
   }
 
@@ -314,7 +323,7 @@ export const parsePackQuantity = (packText = '') => {
   );
 
   for (const match of text.matchAll(countThenMetric)) {
-    const candidate = buildPackCandidate(match[2], match[3], match[1]);
+    const candidate = buildPackCandidate(match[2], match[3], match[1], ingredientName);
     if (candidate) candidates.push(candidate);
   }
 
@@ -324,7 +333,7 @@ export const parsePackQuantity = (packText = '') => {
   );
 
   for (const match of text.matchAll(plainMetric)) {
-    const candidate = buildPackCandidate(match[1], match[2]);
+    const candidate = buildPackCandidate(match[1], match[2], 1, ingredientName);
     if (candidate) candidates.push(candidate);
   }
 
@@ -341,7 +350,7 @@ export const getEffectivePackQuantity = (product, ingredientName = '') => {
     product?.size,
   ].filter(Boolean);
 
-  return parsePackQuantity(textSources.join(' '));
+  return parsePackQuantity(textSources.join(' '), ingredientName);
 };
 
 const alignPackToRequired = (required, pack, ingredientName = '') => {
@@ -382,8 +391,13 @@ export const formatBaseQuantity = (quantity, type) => {
 
   const rounded = round2(amount);
 
-  if (type === 'weight') return `${rounded}g`;
-  if (type === 'volume') return `${rounded}ml`;
+  if (type === 'weight') {
+    return amount >= 1000 ? `${round2(amount / 1000)}kg` : `${rounded}g`;
+  }
+
+  if (type === 'volume') {
+    return amount >= 1000 ? `${round2(amount / 1000)}l` : `${rounded}ml`;
+  }
 
   return `${rounded}`;
 };

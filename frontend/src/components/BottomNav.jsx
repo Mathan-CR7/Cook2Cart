@@ -4,14 +4,18 @@ import { motion } from 'framer-motion';
 const NAV_ITEMS = [
   { path: '/', icon: 'home', label: 'Home' },
   { path: '/search', icon: 'search', label: 'Search' },
+  { path: '/recipes', icon: 'restaurant_menu', label: 'Recipes' },
   { path: '/cart', icon: 'shopping_cart', label: 'Cart' },
-  { path: '/favorites', icon: 'bookmark', label: 'Saved' },
   { path: '/profile', icon: 'person', label: 'Profile' },
 ];
 
 export default function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const isActivePath = (path) => {
+    if (path === '/') return pathname === '/';
+    return pathname === path || pathname.startsWith(`${path}/`);
+  };
 
   return (
     <div className="md:hidden fixed bottom-4 left-4 right-4 z-40">
@@ -20,7 +24,7 @@ export default function BottomNav() {
         style={{ background: 'rgba(255, 255, 255, 0.82)', backdropFilter: 'blur(20px)' }}
       >
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.path;
+          const isActive = isActivePath(item.path);
           return (
             <motion.button
               key={item.path}

@@ -129,6 +129,8 @@ export default function SmartCartPage() {
 
         setSuggestionGroups(groups);
         setDbIngredients(savedIngredients);
+        setRemovedIngredients({});
+        setAtHomeIngredients({});
         const defaults = {};
         const accepted = {};
         const vegetables = {};
@@ -383,6 +385,7 @@ export default function SmartCartPage() {
           setTargetServings(persons);
           setServingsConfirmed(true);
         }}
+        onClose={() => setServingsConfirmed(true)}
       />
       <BottomNav />
       <FAB />

@@ -285,6 +285,7 @@ export const getDisplayQuantityWithConversion = (ingredientName = '', qty, unit)
   
   const name = ingredientName.toLowerCase().trim();
   const isLiquid = name.includes('oil') || name.includes('milk') || name.includes('water') ||
+                    name.includes('ghee') || name.includes('curd') || name.includes('cream') ||
                     name.includes('extract') || name.includes('juice') || name.includes('sauce') || 
                     name.includes('vinegar');
                     

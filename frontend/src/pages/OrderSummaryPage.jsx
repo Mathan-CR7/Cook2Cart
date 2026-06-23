@@ -126,7 +126,17 @@ export default function OrderSummaryPage() {
               key={i} 
               className="bg-white border border-gray-150 rounded-xl px-5 py-3.5 flex items-center gap-3 shadow-[0_1px_2px_rgba(0,0,0,0.01)]"
             >
-              <span className="flex-1 text-sm text-gray-800 font-semibold">{item.selectedProduct?.name || item.name}</span>
+              <div className="flex-1 min-w-0">
+                <span className="block text-base text-gray-800 font-semibold truncate capitalize">
+                  {item.ingredientName || item.selectedProduct?.productName || item.name || 'Item'}
+                </span>
+                {(item.selectedProduct?.productName || item.selectedProduct?.brand) && (
+                  <span className="block text-xs text-gray-400 truncate mt-0.5">
+                    {item.selectedProduct?.productName}
+                    {item.selectedProduct?.brand ? ` · ${item.selectedProduct.brand}` : ''}
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-gray-400 font-bold">x{item.qty || 1}</span>
               <span className="text-sm font-black text-orange-600 min-w-[60px] text-right">₹{(item.price || 0) * (item.qty || 1)}</span>
             </motion.div>

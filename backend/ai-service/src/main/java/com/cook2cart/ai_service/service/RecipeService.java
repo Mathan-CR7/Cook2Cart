@@ -13,4 +13,5 @@ public interface RecipeService {
     List<Ingredient> parseIngredients(List<Ingredient> ingredients, int servings);
     List<StoreProduct> updateLatestPrices(List<StoreProduct> products);
     RecipeResponse extractFromDescription(String videoId);
+    java.util.Map<String, Object> processVideoWorkflow(String videoId, String youtubeUrl, Long dbVideoId, Long userId, String recipeName, String thumbnailUrl);
 }

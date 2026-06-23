@@ -138,6 +138,51 @@ export default function RecipeReviewPage() {
     return 'text-red-600 bg-red-50';
   };
 
+  const getSourceBadge = (source) => {
+    if (!source) return null;
+    const src = source.toLowerCase();
+    if (src.includes('description') && src.includes('transcript')) {
+      return (
+        <span className="inline-flex items-center text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100/50 flex-shrink-0 shadow-[0_1px_2px_rgba(79,70,229,0.03)]">
+          Desc + Transcript
+        </span>
+      );
+    }
+    if (src.includes('description')) {
+      return (
+        <span className="inline-flex items-center text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-xl bg-blue-50 text-blue-600 border border-blue-100/50 flex-shrink-0 shadow-[0_1px_2px_rgba(37,99,235,0.03)]">
+          Description
+        </span>
+      );
+    }
+    if (src.includes('transcript')) {
+      return (
+        <span className="inline-flex items-center text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-xl bg-violet-50 text-violet-600 border border-violet-100/50 flex-shrink-0 shadow-[0_1px_2px_rgba(124,58,237,0.03)]">
+          Transcript
+        </span>
+      );
+    }
+    if (src.includes('speech') || src.includes('audio')) {
+      return (
+        <span className="inline-flex items-center text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100/50 flex-shrink-0 shadow-[0_1px_2px_rgba(5,150,105,0.03)]">
+          Audio
+        </span>
+      );
+    }
+    if (src.includes('image')) {
+      return (
+        <span className="inline-flex items-center text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-xl bg-amber-50 text-amber-600 border border-amber-100/50 flex-shrink-0 shadow-[0_1px_2px_rgba(217,119,6,0.03)]">
+          Image
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-xl bg-gray-50 text-gray-500 border border-gray-150 flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
+        {source}
+      </span>
+    );
+  };
+
   const handleContinue = async () => {
     try {
       let recipeId = state.selectedRecipe?.dbRecipeId;
@@ -274,11 +319,12 @@ export default function RecipeReviewPage() {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex-1 flex items-center gap-2 min-w-0">
+                        <div className="flex-1 flex items-center gap-2.5 min-w-0">
                           <span className="text-orange-600 font-bold text-sm min-w-[70px] flex-shrink-0">
                             {displayQty} {displayUnit}
                           </span>
-                          <span className="text-gray-900 text-sm truncate">{ing.name}</span>
+                          <span className="text-gray-900 text-sm font-semibold truncate capitalize">{ing.name}</span>
+                          {getSourceBadge(ing.source)}
                         </div>
                       )}
 

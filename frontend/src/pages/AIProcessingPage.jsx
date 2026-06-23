@@ -14,47 +14,7 @@ const STEPS = [
   { icon: 'shopping_cart', label: 'Cart Generation', desc: 'Generating your smart cart' },
 ];
 
-const SAMPLE_INGREDIENTS = [
-  { name: 'Rice', quantity: '2 cups', confidence: 97, unit: 'cups' },
-  { name: 'Chicken', quantity: '500', confidence: 95, unit: 'g' },
-  { name: 'Onion', quantity: '2', confidence: 92, unit: 'pieces' },
-  { name: 'Oil', quantity: '3', confidence: 88, unit: 'tbsp' },
-  { name: 'Garlic', quantity: '4', confidence: 90, unit: 'cloves' },
-  { name: 'Ginger', quantity: '1', confidence: 85, unit: 'inch' },
-];
 
-const SAMPLE_INSTRUCTIONS_EN = [
-  "Boil 4 cups of water and 1 teaspoon of salt in a large pan.",
-  "Once the water has boiled, add 2 cups of pasta.",
-  "Boil for 10 minutes or until pasta is cooked. Drain the pasta and set aside.",
-  "In a frying pan, heat 2 tbsp oil and fry 3-4 garlic cloves.",
-  "Add onion, 1 carrot, 1/4 cup peas and fry for a minute.",
-  "To make the white sauce, heat 4 tbsp butter and add 4 tbsp maida.",
-  "Add 2 cups milk and stir until the sauce thickens.",
-  "Combine pasta, vegetables, and sauce, then serve."
-];
-
-const SAMPLE_INSTRUCTIONS_TA = [
-  "ஒரு பெரிய பாத்திரத்தில் 4 கப் தண்ணீர் மற்றும் 1 தேக்கரண்டி உப்பு சேர்த்து கொதிக்க வைக்கவும்.",
-  "தண்ணீர் கொதித்ததும், 2 கப் பாஸ்தா சேர்க்கவும்.",
-  "பாஸ்தா வேகும் வரை 10 நிமிடங்கள் கொதிக்க வைக்கவும், பின் தண்ணீரை வடிகட்டி தனியாக வைக்கவும்.",
-  "ஒரு வறுக்கப்படும் கடாயில் 2 மேஜைக்கரண்டி எண்ணெய் சூடாக்கி, 3-4 பூண்டு பற்களை வதக்கவும்.",
-  "வெங்காயம், 1 கேரட், 1/4 கப் பட்டாணி சேர்த்து ஒரு நிமிடம் வதக்கவும்.",
-  "வெள்ளை சாஸ் செய்ய, 4 மேஜைக்கரண்டி வெண்ணெய் சூடாக்கி, 4 மேஜைக்கரண்டி மைதா சேர்க்கவும்.",
-  "2 கப் பால் சேர்த்து சாஸ் கெட்டியாகும் வரை கிளறவும்.",
-  "பாஸ்தா, காய்கறிகள் மற்றும் சாஸ் ஆகியவற்றை ஒன்றாக கலந்து பரிமாறவும்."
-];
-
-const SAMPLE_INSTRUCTIONS_HI = [
-  "एक बड़े बर्तन में 4 कप पानी और 1 चम्मच नमक डालकर उबालें।",
-  "पानी उबलने के बाद, 2 कप पास्ता डालें।",
-  "पास्ता पकने तक 10 मिनट तक उबालें, फिर पानी छानकर अलग रख दें।",
-  "एक कढ़ाई में 2 चम्मच तेल गरम करें और 3-4 लहसुन की कलियाँ भूनें।",
-  "प्याज, 1 गाजर, 1/4 कप मटर डालें और एक मिनट तक भूनें।",
-  "व्हाइट सॉस बनाने के लिए, 4 चम्मच मक्खन गरम करें और 4 चम्मच मैदा डालें।",
-  "2 कप दूध डालें और सॉस गाढ़ा होने तक चलाएं।",
-  "पास्ता, सब्जियां और सॉस मिलाएं, फिर परोसें।"
-];
 
 const toNumber = (value, fallback = 1) => {
   const parsed = parseFloat(value);
@@ -112,8 +72,18 @@ export default function AIProcessingPage() {
   const [currentStep, setCurrentStep] = useState(-1);
   const [progress, setProgress] = useState(0);
   const [statusMsg, setStatusMsg] = useState('Analyzing the video to extract ingredients');
+  const [error, setError] = useState(null);
+  const [videoDownloaded, setVideoDownloaded] = useState(false);
+  const [audioExtracted, setAudioExtracted] = useState(false);
 
   useEffect(() => {
+    let pollInterval = null;
+    let finished = false;
+    let mainFailed = false;
+    let pollCount = 0;
+    const maxPollsAfterFailure = 15;
+    const absoluteMaxPolls = 60;
+
     async function processRecipe() {
       dispatch({ type: 'START_AI_PROCESSING' });
 
@@ -121,7 +91,7 @@ export default function AIProcessingPage() {
       const videoTitle = simplifyRecipeTitle(locationState?.title) || 'My Recipe';
       const userId = state.user?.id || null;
       let dbVideoId = locationState?.dbVideoId || null;
-      let dbRecipeId = null;
+      let dbRecipeId = locationState?.dbRecipeId || null;
 
       const saveVideoMetadata = async () => {
         if (dbVideoId) return dbVideoId;
@@ -145,6 +115,7 @@ export default function AIProcessingPage() {
           const response = await recipeCatalogService.createRecipe({
             userId,
             videoId: savedVideoId,
+            youtubeVideoId: videoId,
             recipeName: videoTitle,
             cuisine: null,
             thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
@@ -186,6 +157,99 @@ export default function AIProcessingPage() {
         }
       };
 
+      const handleFinalFailure = async (errorMsg) => {
+        try {
+          const failedVideoId = await saveVideoMetadata();
+          await videoCatalogService.saveProcessedVideo({
+            userId,
+            videoId: failedVideoId,
+            audioPath: null,
+            videoPath: null,
+            s3Url: null,
+            status: 'FAILED',
+          });
+        } catch (saveErr) {
+          console.error('Failed to save failed processed video metadata:', saveErr);
+        }
+        setStatusMsg(errorMsg);
+        setError(errorMsg);
+      };
+
+      const checkRecipeAndNavigate = async (savedVideoId, isImmediate = false) => {
+        if (finished) return true;
+        try {
+          const recipeResponse = await recipeCatalogService.getLatestRecipeByVideo(savedVideoId);
+          if (recipeResponse && recipeResponse.data) {
+            finished = true;
+            if (pollInterval) clearInterval(pollInterval);
+            
+            const dbRecipe = recipeResponse.data;
+            dbRecipeId = dbRecipe.id;
+            
+            const ingredientsResponse = await recipeCatalogService.getRecipeIngredients(dbRecipeId);
+            const dbIngredients = ingredientsResponse.data || [];
+            
+            const formattedIngredients = dbIngredients.map(item => ({
+              id: item.id,
+              recipeIngredientId: item.id,
+              name: item.ingredientName,
+              recipeQuantity: item.recipeQuantity,
+              recipeUnit: item.recipeUnit,
+              quantity: item.quantity,
+              unit: item.unit,
+              estimated: item.estimated,
+              source: item.source,
+              confidence: item.confidence
+            }));
+
+            const formattedInstructions = (dbRecipe.instructions || []).map(item => item.instruction);
+
+            dispatch({
+              type: 'SET_SELECTED_RECIPE',
+              payload: {
+                id: videoId,
+                videoId,
+                dbVideoId: savedVideoId,
+                dbRecipeId,
+                title: videoTitle,
+                thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+              },
+            });
+
+            dispatch({ 
+              type: 'FINISH_AI_PROCESSING', 
+              payload: {
+                ingredients: formattedIngredients,
+                instructions: formattedInstructions
+              }
+            });
+            
+            syncStoredRecipe(formattedIngredients, formattedInstructions);
+            
+            const navigateTarget = () => {
+              const addressSelected = state.selectedAddress || localStorage.getItem('selectedAddress');
+              if (addressSelected) {
+                navigate(`/cart/${videoId}`);
+              } else {
+                navigate(`/location/${dbRecipeId}`);
+              }
+            };
+
+            if (isImmediate) {
+              navigateTarget();
+            } else {
+              setProgress(100);
+              setStatusMsg('Recipe successfully retrieved! Loading cart...');
+              setTimeout(navigateTarget, 1200);
+            }
+            return true;
+          }
+        } catch (pollErr) {
+          // Ignore and retry
+        }
+        return false;
+      };
+
       dispatch({
         type: 'SET_SELECTED_RECIPE',
         payload: {
@@ -202,40 +266,43 @@ export default function AIProcessingPage() {
         setCurrentStep(2);
         dispatch({ type: 'SET_AI_STEP', payload: 2 });
         setProgress(15);
-        setStatusMsg('Checking YouTube description for ingredients...');
+        setStatusMsg('Checking if recipe was already processed...');
 
+        // FAST CHECK: Check by YouTube video ID directly (no need to save video first)
         try {
-          await saveVideoMetadata();
-          const descResponse = await aiService.extractDescription(videoId);
-          const descriptionIngredients = descResponse.data?.ingredients || [];
+          const quickCheck = await recipeCatalogService.checkByYoutubeId(videoId);
+          if (quickCheck.status === 200 && quickCheck.data) {
+            finished = true;
+            if (pollInterval) clearInterval(pollInterval);
 
-          if (descriptionIngredients.length > 0) {
-            setCurrentStep(4);
-            dispatch({ type: 'SET_AI_STEP', payload: 4 });
-            setProgress(100);
-            setStatusMsg('Ingredients found in description. Preparing review...');
+            const dbRecipe = quickCheck.data;
+            dbRecipeId = dbRecipe.id;
+            const savedVideoId = dbRecipe.videoId || dbVideoId;
 
-            let instructions = descResponse.data.instructions;
-            if (!instructions || instructions.length === 0) {
-              let detectedLang = 'en';
-              const titleLower = videoTitle.toLowerCase();
-              if (titleLower.includes('tamil') || /[\u0b80-\u0bff]/.test(videoTitle)) {
-                detectedLang = 'ta';
-              } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
-                detectedLang = 'hi';
-              }
-              instructions = buildFallbackInstructions(videoTitle, descriptionIngredients);
-            }
+            const ingredientsResponse = await recipeCatalogService.getRecipeIngredients(dbRecipeId);
+            const dbIngredients = ingredientsResponse.data || [];
 
-            const savedRecipe = await saveRecipeToDb(descriptionIngredients, instructions);
-            const dbIngredients = mergeSavedIngredientIds(descriptionIngredients, savedRecipe?.ingredients || []);
+            const formattedIngredients = dbIngredients.map(item => ({
+              id: item.id,
+              recipeIngredientId: item.id,
+              name: item.ingredientName,
+              recipeQuantity: item.recipeQuantity,
+              recipeUnit: item.recipeUnit,
+              quantity: item.quantity,
+              unit: item.unit,
+              estimated: item.estimated,
+              source: item.source,
+              confidence: item.confidence
+            }));
+
+            const formattedInstructions = (dbRecipe.instructions || []).map(item => item.instruction);
 
             dispatch({
               type: 'SET_SELECTED_RECIPE',
               payload: {
                 id: videoId,
                 videoId,
-                dbVideoId,
+                dbVideoId: savedVideoId,
                 dbRecipeId,
                 title: videoTitle,
                 thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
@@ -245,20 +312,158 @@ export default function AIProcessingPage() {
             dispatch({
               type: 'FINISH_AI_PROCESSING',
               payload: {
-                ingredients: dbIngredients,
-                instructions,
-              },
+                ingredients: formattedIngredients,
+                instructions: formattedInstructions
+              }
             });
-            syncStoredRecipe(dbIngredients, instructions);
+
+            syncStoredRecipe(formattedIngredients, formattedInstructions);
+            setProgress(100);
+            setStatusMsg('Recipe loaded from cache! Redirecting...');
+
+            const addressSelected = state.selectedAddress || localStorage.getItem('selectedAddress');
             setTimeout(() => {
-              navigate(`/review/${videoId}`);
-            }, 1200);
+              if (addressSelected) {
+                navigate(`/cart/${videoId}`);
+              } else {
+                navigate(`/location/${dbRecipeId}`);
+              }
+            }, 600);
             return;
           }
-        } catch (descErr) {
-          console.log('No ingredients found in YouTube description. Continuing with video processing...', descErr);
+        } catch (quickCheckErr) {
+          // Not cached yet, proceed with normal flow
         }
 
+        const savedVideoId = await saveVideoMetadata();
+
+        // If we already know the dbRecipeId from navigation state, skip straight to cart
+        if (dbRecipeId) {
+          const alreadyExists = await checkRecipeAndNavigate(savedVideoId, true);
+          if (alreadyExists) return;
+        }
+
+        // Check if already processed (from DB)
+        const alreadyExists = await checkRecipeAndNavigate(savedVideoId, true);
+        if (alreadyExists) return;
+
+        // Start polling in background
+        pollInterval = setInterval(async () => {
+          pollCount++;
+          if (finished) {
+            clearInterval(pollInterval);
+            return;
+          }
+          
+          const found = await checkRecipeAndNavigate(savedVideoId, false);
+          if (found) {
+            clearInterval(pollInterval);
+            return;
+          }
+
+          if (mainFailed && pollCount > maxPollsAfterFailure) {
+            clearInterval(pollInterval);
+            const errorMsg = 'Backend AI Service encountered an internal error. Please try again later.';
+            handleFinalFailure(errorMsg);
+            return;
+          }
+
+          if (pollCount > absoluteMaxPolls) {
+            clearInterval(pollInterval);
+            const errorMsg = 'AI processing timed out. Please try again later.';
+            handleFinalFailure(errorMsg);
+            return;
+          }
+        }, 2000);
+
+        if (finished) return;
+        const workflowResponse = await aiService.processWorkflow({
+          videoId,
+          youtubeUrl,
+          dbVideoId: savedVideoId,
+          userId,
+          recipeName: videoTitle,
+          thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+        });
+
+        if (finished) return;
+        const { status, recipeId, cartId, recipe, cart } = workflowResponse.data || {};
+
+        if (status === 'CART_GENERATED_FROM_DESCRIPTION' || status === 'CART_GENERATED_FROM_TRANSCRIPT' || status === 'CART_GENERATED_FROM_CACHE') {
+          finished = true;
+          if (pollInterval) clearInterval(pollInterval);
+
+          dbRecipeId = recipeId;
+          dispatch({
+            type: 'SET_SELECTED_RECIPE',
+            payload: {
+              id: videoId,
+              videoId,
+              dbVideoId: savedVideoId,
+              dbRecipeId: recipeId,
+              title: videoTitle,
+              thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+            },
+          });
+
+          const recipeIngredients = recipe?.ingredients || [];
+          const recipeInstructions = recipe?.instructions || [];
+
+          const formattedIngredients = recipeIngredients.map(item => ({
+            id: item.id,
+            recipeIngredientId: item.id,
+            name: item.ingredientName,
+            recipeQuantity: item.recipeQuantity,
+            recipeUnit: item.recipeUnit,
+            quantity: item.quantity,
+            unit: item.unit,
+            estimated: item.estimated,
+            source: item.source,
+            confidence: item.confidence
+          }));
+
+          const formattedInstructions = recipeInstructions.map(item => item.instruction);
+
+          dispatch({
+            type: 'FINISH_AI_PROCESSING',
+            payload: {
+              ingredients: formattedIngredients,
+              instructions: formattedInstructions,
+            },
+          });
+
+          if (cart) {
+            dispatch({ type: 'SET_CART', payload: cart });
+          }
+
+          syncStoredRecipe(formattedIngredients, formattedInstructions);
+
+          const navigateTarget = () => {
+            const addressSelected = state.selectedAddress || localStorage.getItem('selectedAddress');
+            if (addressSelected) {
+              navigate(`/cart/${videoId}`);
+            } else {
+              navigate(`/location/${recipeId}`);
+            }
+          };
+
+          if (status === 'CART_GENERATED_FROM_CACHE') {
+            navigateTarget();
+          } else {
+            setCurrentStep(4);
+            dispatch({ type: 'SET_AI_STEP', payload: 4 });
+            setProgress(100);
+            setStatusMsg(
+              status === 'CART_GENERATED_FROM_DESCRIPTION'
+                ? 'Ingredients found in description. Generating smart cart...'
+                : 'Ingredients found in transcript. Generating smart cart...'
+            );
+            setTimeout(navigateTarget, 1200);
+          }
+          return;
+        }
+
+        if (finished) return;
         // Step 1: Downloading Video & Step 2: Extracting Audio
         setCurrentStep(0);
         dispatch({ type: 'SET_AI_STEP', payload: 0 });
@@ -270,6 +475,8 @@ export default function AIProcessingPage() {
           console.error('Failed to save video metadata before processing, continuing:', err);
         }
         const videoResponse = await videoService.process(youtubeUrl);
+        if (finished) return;
+        setVideoDownloaded(true);
         const audioPathFromProcess = videoResponse.data ? videoResponse.data.audioPath : null;
         const videoPathFromProcess = videoResponse.data ? videoResponse.data.videoPath : null;
 
@@ -286,6 +493,7 @@ export default function AIProcessingPage() {
           });
         }
 
+        if (finished) return;
         setCurrentStep(1);
         dispatch({ type: 'SET_AI_STEP', payload: 1 });
         setProgress(40);
@@ -293,8 +501,11 @@ export default function AIProcessingPage() {
         const audioPath = audioPathFromProcess;
         const filename = audioPath ? audioPath.substring(Math.max(audioPath.lastIndexOf('/'), audioPath.lastIndexOf('\\')) + 1) : 'recipe.mp3';
         const audioResponse = await api.get('/video/download/audio', { params: { filename }, responseType: 'blob' });
+        if (finished) return;
+        setAudioExtracted(true);
 
         // Step 3: Understanding Recipe & Step 4: Detecting Ingredients
+        if (finished) return;
         setCurrentStep(2);
         dispatch({ type: 'SET_AI_STEP', payload: 2 });
         setProgress(60);
@@ -304,12 +515,14 @@ export default function AIProcessingPage() {
         const sanitizedTitle = videoTitle.replace(/[^a-zA-Z0-9]/g, '_');
         formData.append('file', audioResponse.data, `${sanitizedTitle}.mp3`);
 
+        if (finished) return;
         setCurrentStep(3);
         dispatch({ type: 'SET_AI_STEP', payload: 3 });
         setProgress(80);
         setStatusMsg('Detecting ingredients and quantities...');
         const aiResponse = await aiService.processAudio(formData, videoId);
 
+        if (finished) return;
         setCurrentStep(4);
         dispatch({ type: 'SET_AI_STEP', payload: 4 });
         setProgress(100);
@@ -329,6 +542,10 @@ export default function AIProcessingPage() {
 
         const savedRecipe = await saveRecipeToDb(aiResponse.data.ingredients, instructions);
         const dbIngredients = mergeSavedIngredientIds(aiResponse.data.ingredients, savedRecipe?.ingredients || []);
+
+        if (finished) return;
+        finished = true;
+        if (pollInterval) clearInterval(pollInterval);
 
         dispatch({
           type: 'SET_SELECTED_RECIPE',
@@ -357,95 +574,48 @@ export default function AIProcessingPage() {
       } catch (err) {
         console.error('Error processing recipe through backend:', err);
 
-        try {
-          const failedVideoId = await saveVideoMetadata();
-          await videoCatalogService.saveProcessedVideo({
-            userId,
-            videoId: failedVideoId,
-            audioPath: null,
-            videoPath: null,
-            s3Url: null,
-            status: 'FAILED',
-          });
-        } catch (saveErr) {
-          console.error('Failed to save failed processed video metadata:', saveErr);
+        const isQuotaLimit = err.response && (
+          err.response.status === 429 ||
+          (err.response.status === 500 && (
+            err.response.data?.message?.toLowerCase().includes('429') ||
+            err.response.data?.message?.toLowerCase().includes('quota')
+          ))
+        );
+        const isAuthError = err.response && (
+          err.response.status === 401 ||
+          err.response.status === 403 ||
+          (err.response.status === 500 && (
+            err.response.data?.message?.toLowerCase().includes('401') ||
+            err.response.data?.message?.toLowerCase().includes('403') ||
+            err.response.data?.message?.toLowerCase().includes('unauthorized') ||
+            err.response.data?.message?.toLowerCase().includes('invalid')
+          ))
+        );
+
+        if (isQuotaLimit || isAuthError) {
+          finished = true;
+          if (pollInterval) clearInterval(pollInterval);
+          const errorMsg = isQuotaLimit 
+            ? 'AI Quota Limit is reached. Please configure a valid API key or try again later.'
+            : 'Gemini API key is invalid or unauthorized. Please configure a valid API key or try again later.';
+          await handleFinalFailure(errorMsg);
+          return;
         }
-        
-        let errorMsg = 'Failed to connect to backend AI service. Falling back to local simulation...';
-        if (err.response) {
-          if (err.response.status === 429) {
-            errorMsg = 'AI API Rate Limit reached (Too Many Requests). Falling back to local simulation...';
-          } else if (err.response.status === 500) {
-            if (err.response.data && (err.response.data.message || '').includes('429')) {
-              errorMsg = 'AI Service Quota Exceeded (429 Rate Limit). Falling back to local simulation...';
-            } else {
-              errorMsg = 'Backend AI Service encountered an internal error. Falling back to local simulation...';
-            }
-          } else if (err.response.status === 504 || err.response.status === 502) {
-            errorMsg = 'Backend service connection timeout. Falling back to local simulation...';
-          }
-        } else if (err.message && err.message.includes('Network Error')) {
-          errorMsg = 'Network connection failed to the backend services. Falling back to local simulation...';
-        }
-        
-        setStatusMsg(errorMsg);
-        
-        // Graceful fallback animation
-        let step = currentStep >= 0 ? currentStep : 0;
-        const interval = setInterval(() => {
-          if (step < STEPS.length) {
-            setCurrentStep(step);
-            dispatch({ type: 'SET_AI_STEP', payload: step });
-            setProgress(((step + 1) / STEPS.length) * 100);
 
-            if (step === STEPS.length - 1) {
-              clearInterval(interval);
-              
-              let detectedLang = 'en';
-              const titleLower = videoTitle.toLowerCase();
-              if (titleLower.includes('tamil') || /[\u0b80-\u0bff]/.test(videoTitle)) {
-                detectedLang = 'ta';
-              } else if (titleLower.includes('hindi') || /[\u0900-\u097f]/.test(videoTitle)) {
-                detectedLang = 'hi';
-              }
-              const fallbackInstructions = buildFallbackInstructions(videoTitle, SAMPLE_INGREDIENTS);
-
-              saveRecipeToDb(SAMPLE_INGREDIENTS, fallbackInstructions).then((savedRecipe) => {
-                const dbIngredients = mergeSavedIngredientIds(SAMPLE_INGREDIENTS, savedRecipe?.ingredients || []);
-                dispatch({
-                  type: 'SET_SELECTED_RECIPE',
-                  payload: {
-                    id: videoId,
-                    videoId,
-                    dbVideoId,
-                    dbRecipeId,
-                    title: videoTitle,
-                    thumbnailUrl: locationState?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-                  },
-                });
-
-                dispatch({ 
-                  type: 'FINISH_AI_PROCESSING', 
-                  payload: {
-                    ingredients: dbIngredients,
-                    instructions: fallbackInstructions
-                  }
-                });
-                syncStoredRecipe(dbIngredients, fallbackInstructions);
-              });
-              setTimeout(() => {
-                navigate(`/review/${videoId}`);
-              }, 1200);
-            }
-            step++;
-          } else {
-            clearInterval(interval);
-          }
-        }, 1000);
+        // If it is any other error (such as a Gateway Timeout), the background consumer
+        // is likely still processing the video. Let's poll the database to check.
+        mainFailed = true;
+        pollCount = 0;
+        setStatusMsg('Checking background processing status...');
+        setProgress(90);
       }
     }
 
     processRecipe();
+    return () => {
+      finished = true;
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, [videoId, locationState, dispatch, navigate]);
 
   return (
@@ -462,14 +632,14 @@ export default function AIProcessingPage() {
           <motion.div
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
-            className="absolute inset-4 rounded-full border border-orange-200/40 bg-white/80 backdrop-blur-xl flex items-center justify-center shadow-lg"
+            className={`absolute inset-4 rounded-full border bg-white/80 backdrop-blur-xl flex items-center justify-center shadow-lg ${error ? 'border-red-200/40' : 'border-orange-200/40'}`}
           >
             <motion.span
               animate={{ opacity: [0.75, 1, 0.75] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
-              className="material-icon fill text-4xl text-[#ff6b35]"
+              className={`material-icon fill text-4xl ${error ? 'text-red-500' : 'text-[#ff6b35]'}`}
             >
-              psychology
+              {error ? 'error_outline' : 'psychology'}
             </motion.span>
           </motion.div>
 
@@ -478,7 +648,7 @@ export default function AIProcessingPage() {
               cx="50"
               cy="50"
               r="46"
-              className="stroke-[#ff6b35]/5 fill-none"
+              className={`fill-none ${error ? 'stroke-red-500/5' : 'stroke-[#ff6b35]/5'}`}
               strokeWidth="1.5"
             />
             <circle
@@ -486,7 +656,7 @@ export default function AIProcessingPage() {
               cy="50"
               r="46"
               className="fill-none animate-spin-slow"
-              stroke="#ff8e53"
+              stroke={error ? '#ef4444' : '#ff8e53'}
               strokeWidth="1.5"
               strokeDasharray="10 30"
               style={{ transformOrigin: '50% 50%' }}
@@ -503,10 +673,10 @@ export default function AIProcessingPage() {
               cy="50"
               r="42"
               className="fill-none"
-              stroke="url(#aiGlow)"
+              stroke={error ? 'url(#errorGlow)' : 'url(#aiGlow)'}
               strokeWidth="4"
               strokeDasharray="264"
-              strokeDashoffset={264 - (264 * progress) / 100}
+              strokeDashoffset={error ? 0 : 264 - (264 * progress) / 100}
               strokeLinecap="round"
               style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
             />
@@ -516,87 +686,112 @@ export default function AIProcessingPage() {
                 <stop offset="60%" stopColor="#ff6b35" />
                 <stop offset="100%" stopColor="#ff4f11" />
               </linearGradient>
+              <linearGradient id="errorGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f87171" />
+                <stop offset="60%" stopColor="#ef4444" />
+                <stop offset="100%" stopColor="#b91c1c" />
+              </linearGradient>
             </defs>
           </svg>
         </div>
 
         <div className="mb-10">
-          <h1 className="font-display font-extrabold text-2xl md:text-3xl text-[#1e2229] mb-2 tracking-tight">
-            AI Recipe Parsing Active
+          <h1 className={`font-display font-extrabold text-2xl md:text-3xl mb-2 tracking-tight ${error ? 'text-red-600' : 'text-[#1e2229]'}`}>
+            {error ? 'AI Processing Failed' : 'AI Recipe Parsing Active'}
           </h1>
-          <p className="text-gray-500 text-sm min-h-10 px-6 overflow-hidden text-ellipsis leading-relaxed font-display font-medium">
+          <p className={`text-sm min-h-10 px-6 overflow-hidden text-ellipsis leading-relaxed font-display font-medium ${error ? 'text-red-500' : 'text-gray-500'}`}>
             {statusMsg}
           </p>
         </div>
 
-        <div className="w-full h-2 bg-gray-200/40 rounded-full overflow-hidden mb-12 border border-white/90 shadow-inner">
-          <motion.div
-            className="h-full rounded-full gradient-bg"
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-          />
-        </div>
-
-        <div className="relative pl-12 flex flex-col gap-4 text-left">
-          <div className="absolute left-[18px] top-6 bottom-6 w-[2px] bg-gray-200/60 z-0">
-            <motion.div
-              className="w-full bg-gradient-to-b from-[#10b981] to-[#ff6b35]"
-              animate={{ height: `${currentStep >= 0 ? (currentStep / (STEPS.length - 1)) * 100 : 0}%` }}
-              transition={{ duration: 0.5 }}
-            />
+        {error ? (
+          <div className="flex flex-col items-center gap-4 mt-6">
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 rounded-xl bg-red-600 text-white font-semibold font-display shadow-md hover:bg-red-700 transition-colors"
+            >
+              Go to Home
+            </button>
           </div>
-
-          {STEPS.map((step, i) => {
-            const isCompleted = currentStep > i;
-            const isActive = currentStep === i;
-
-            return (
+        ) : (
+          <>
+            <div className="w-full h-2 bg-gray-200/40 rounded-full overflow-hidden mb-12 border border-white/90 shadow-inner">
               <motion.div
-              key={i}
-                initial={{ opacity: 0, x: -15 }}
-                animate={{
-                  opacity: isActive ? 1 : isCompleted ? 0.75 : 0.4,
-                  x: 0,
-                  scale: isActive ? 1.01 : 1,
-                  boxShadow: isActive ? '0 8px 30px rgba(255, 107, 53, 0.06)' : 'none'
-                }}
-                transition={{ duration: 0.45 }}
-                className={`glass p-4 rounded-2xl border flex items-center gap-4 relative z-10 transition-colors ${
-                  isActive
-                    ? 'border-[#ff6b35]/30 bg-white'
-                    : isCompleted
-                      ? 'border-gray-200/50'
-                      : 'border-gray-200/20'
-                }`}
-              >
+                className="h-full rounded-full gradient-bg"
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+              />
+            </div>
+
+            <div className="relative pl-12 flex flex-col gap-4 text-left">
+              <div className="absolute left-[18px] top-6 bottom-6 w-[2px] bg-gray-200/60 z-0">
                 <motion.div
-                  animate={{
-                    scale: isActive ? [1, 1.08, 1] : 1,
-                    rotate: isCompleted ? 360 : 0
-                  }}
-                  transition={{
-                    scale: isActive ? { repeat: Infinity, duration: 1.8 } : { duration: 0.3 }
-                  }}
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 z-10 ${
-                    isCompleted
-                      ? 'bg-emerald-50 text-[#10b981] border border-[#10b981]/20'
-                      : isActive
-                        ? 'gradient-bg text-white shadow-md'
-                        : 'bg-white text-gray-400 border border-gray-200/50'
-                  }`}
-                >
-                  <span className="material-icon !text-lg">{isCompleted ? 'check' : step.icon}</span>
-                </motion.div>
-              <div>
-                  <h3 className={`font-display font-bold text-sm transition-colors ${isActive ? 'text-[#ff6b35]' : isCompleted ? 'text-gray-700' : 'text-gray-400'}`}>
-                    {step.label}
-                  </h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{step.desc}</p>
+                  className="w-full bg-gradient-to-b from-[#10b981] to-[#ff6b35]"
+                  animate={{ height: `${currentStep >= 0 ? (currentStep / (STEPS.length - 1)) * 100 : 0}%` }}
+                  transition={{ duration: 0.5 }}
+                />
               </div>
-              </motion.div>
-            );
-          })}
-        </div>
+
+              {STEPS.map((step, i) => {
+                let isCompleted = false;
+                if (i === 0) {
+                  isCompleted = videoDownloaded;
+                } else if (i === 1) {
+                  isCompleted = audioExtracted;
+                } else {
+                  isCompleted = currentStep > i;
+                }
+                const isActive = currentStep === i;
+
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -15 }}
+                    animate={{
+                      opacity: isActive ? 1 : isCompleted ? 0.75 : 0.4,
+                      x: 0,
+                      scale: isActive ? 1.01 : 1,
+                      boxShadow: isActive ? '0 8px 30px rgba(255, 107, 53, 0.06)' : 'none'
+                    }}
+                    transition={{ duration: 0.45 }}
+                    className={`glass p-4 rounded-2xl border flex items-center gap-4 relative z-10 transition-colors ${
+                      isActive
+                        ? 'border-[#ff6b35]/30 bg-white'
+                        : isCompleted
+                          ? 'border-gray-200/50'
+                          : 'border-gray-200/20'
+                    }`}
+                  >
+                    <motion.div
+                      animate={{
+                        scale: isActive ? [1, 1.08, 1] : 1,
+                        rotate: isCompleted ? 360 : 0
+                      }}
+                      transition={{
+                        scale: isActive ? { repeat: Infinity, duration: 1.8 } : { duration: 0.3 }
+                      }}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 z-10 ${
+                        isCompleted
+                          ? 'bg-emerald-50 text-[#10b981] border border-[#10b981]/20'
+                          : isActive
+                            ? 'gradient-bg text-white shadow-md'
+                            : 'bg-white text-gray-400 border border-gray-200/50'
+                      }`}
+                    >
+                      <span className="material-icon !text-lg">{isCompleted ? 'check' : step.icon}</span>
+                    </motion.div>
+                    <div>
+                      <h3 className={`font-display font-bold text-sm transition-colors ${isActive ? 'text-[#ff6b35]' : isCompleted ? 'text-gray-700' : 'text-gray-400'}`}>
+                        {step.label}
+                      </h3>
+                      <p className="text-xs text-gray-400 mt-0.5">{step.desc}</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </motion.div>
     </div>
   );

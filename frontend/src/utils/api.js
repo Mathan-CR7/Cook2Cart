@@ -75,12 +75,14 @@ export const aiService = {
   extractDescription: (videoId) => api.post('/api/ai/recipe/extract-description', null, {
     params: { videoId }
   }),
+  processWorkflow: (params) => api.post('/api/ai/recipe/process-workflow', null, { params }),
 };
 
 export const recipeCatalogService = {
   createRecipe: (data) => api.post('/api/recipes', data),
   getRecipesByUser: (userId) => api.get(`/api/recipes/user/${userId}`),
   getLatestRecipeByVideo: (videoId) => api.get(`/api/recipes/video/${videoId}`),
+  checkByYoutubeId: (youtubeVideoId) => api.get(`/api/recipes/check/${youtubeVideoId}`),
   getRecipeIngredients: (recipeId) => api.get(`/api/recipes/${recipeId}/ingredients`),
 };
 

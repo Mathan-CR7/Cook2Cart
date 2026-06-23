@@ -5,6 +5,7 @@ import java.util.List;
 public record RecipeCreateRequest(
         Long userId,
         Long videoId,
+        String youtubeVideoId,
         String recipeName,
         String cuisine,
         String thumbnailUrl,

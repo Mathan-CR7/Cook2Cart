@@ -29,6 +29,18 @@ public class RecipeCatalogController {
         return recipeCatalogService.getLatestRecipeByVideoId(videoId);
     }
 
+    @GetMapping("/check/{youtubeVideoId}")
+    public org.springframework.http.ResponseEntity<RecipeDTO> checkRecipeByYoutubeId(@PathVariable String youtubeVideoId) {
+        try {
+            RecipeDTO recipe = recipeCatalogService.getLatestRecipeByYoutubeVideoId(youtubeVideoId);
+            if (recipe != null) {
+                return org.springframework.http.ResponseEntity.ok(recipe);
+            }
+        } catch (Exception ignored) {
+        }
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{recipeId}/ingredients")
     public List<RecipeIngredientDTO> getRecipeIngredients(@PathVariable Long recipeId) {
         return recipeCatalogService.getRecipeIngredients(recipeId);

@@ -31,23 +31,51 @@ public class RecipeCatalogService {
 
     @Transactional
     public RecipeDTO createRecipe(RecipeCreateRequest request) {
-        Recipe recipe = Recipe.builder()
-                .userId(request.userId())
-                .videoId(request.videoId())
-                .recipeName(request.recipeName())
-                .cuisine(request.cuisine())
-                .thumbnailUrl(request.thumbnailUrl())
-                .createdAt(LocalDateTime.now())
-                .build();
+        // If we already have a recipe for this YouTube video, update it instead of duplicating
+        Recipe recipe = null;
+        if (request.youtubeVideoId() != null && !request.youtubeVideoId().isBlank()) {
+            recipe = recipeRepository.findLatestIdByYoutubeVideoId(request.youtubeVideoId())
+                    .flatMap(recipeRepository::findByIdWithDetails)
+                    .orElse(null);
+        }
+        if (recipe == null && request.videoId() != null) {
+            recipe = recipeRepository.findLatestIdByVideoId(request.videoId())
+                    .flatMap(recipeRepository::findByIdWithDetails)
+                    .orElse(null);
+        }
+        if (recipe == null) {
+            recipe = Recipe.builder()
+                    .userId(request.userId())
+                    .videoId(request.videoId())
+                    .youtubeVideoId(request.youtubeVideoId())
+                    .recipeName(request.recipeName())
+                    .cuisine(request.cuisine())
+                    .thumbnailUrl(request.thumbnailUrl())
+                    .createdAt(LocalDateTime.now())
+                    .build();
+        } else {
+            // Update fields but keep existing ingredients/instructions if new ones provided
+            recipe.setUserId(request.userId());
+            if (request.videoId() != null) recipe.setVideoId(request.videoId());
+            if (request.youtubeVideoId() != null) recipe.setYoutubeVideoId(request.youtubeVideoId());
+            recipe.setRecipeName(request.recipeName());
+            recipe.setCuisine(request.cuisine());
+            recipe.setThumbnailUrl(request.thumbnailUrl());
+            recipe.setCreatedAt(LocalDateTime.now());
+            // Clear old ingredients and instructions to replace with new ones
+            recipe.getIngredients().clear();
+            recipe.getInstructions().clear();
+        }
 
+        final Recipe finalRecipe = recipe;
         if (request.ingredients() != null) {
             request.ingredients().stream()
                     .filter(item -> item.ingredientName() != null && !item.ingredientName().isBlank())
                     .forEach(item -> {
                         IngredientEntity ingredient = getOrCreateIngredient(item.ingredientName());
 
-                        recipe.getIngredients().add(RecipeIngredient.builder()
-                                .recipe(recipe)
+                        finalRecipe.getIngredients().add(RecipeIngredient.builder()
+                                .recipe(finalRecipe)
                                 .ingredient(ingredient)
                                 .recipeQuantity(item.recipeQuantity())
                                 .recipeUnit(item.recipeUnit())
@@ -67,15 +95,15 @@ public class RecipeCatalogService {
                     continue;
                 }
 
-                recipe.getInstructions().add(RecipeInstruction.builder()
-                        .recipe(recipe)
+                finalRecipe.getInstructions().add(RecipeInstruction.builder()
+                        .recipe(finalRecipe)
                         .stepNumber(i + 1)
                         .instruction(instruction.trim())
                         .build());
             }
         }
 
-        RecipeDTO savedRecipe = toRecipeDTO(recipeRepository.save(recipe));
+        RecipeDTO savedRecipe = toRecipeDTO(recipeRepository.save(finalRecipe));
         evictUserRecipesCache(request.userId());
         return savedRecipe;
     }
@@ -104,15 +132,35 @@ public class RecipeCatalogService {
 
     @Transactional(readOnly = true)
     public RecipeDTO getLatestRecipeByVideoId(Long videoId) {
-        Recipe recipe = recipeRepository.findFirstByVideoIdOrderByCreatedAtDesc(videoId)
-                .orElseThrow(() -> new RuntimeException("Recipe not found for video"));
+        if (videoId == null) return null;
+        // Two-step: find ID first (SQL LIMIT works correctly), then fetch full entity with JOIN FETCH
+        return recipeRepository.findLatestIdByVideoId(videoId)
+                .flatMap(recipeRepository::findByIdWithDetails)
+                .map(this::toRecipeDTO)
+                .orElse(null);
+    }
 
-        return toRecipeDTO(recipe);
+    @Transactional(readOnly = true)
+    public RecipeDTO getLatestRecipeByYoutubeVideoId(String youtubeVideoId) {
+        if (youtubeVideoId == null || youtubeVideoId.isBlank()) return null;
+        // Two-step: find ID first (SQL LIMIT works correctly), then fetch full entity with JOIN FETCH
+        return recipeRepository.findLatestIdByYoutubeVideoId(youtubeVideoId)
+                .flatMap(recipeRepository::findByIdWithDetails)
+                .map(this::toRecipeDTO)
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean recipeExistsForVideo(Long videoId) {
+        if (videoId == null) {
+            return false;
+        }
+        return recipeRepository.findLatestIdByVideoId(videoId).isPresent();
     }
 
     @Transactional(readOnly = true)
     public List<RecipeIngredientDTO> getRecipeIngredients(Long recipeId) {
-        Recipe recipe = recipeRepository.findById(recipeId)
+        Recipe recipe = recipeRepository.findByIdWithDetails(recipeId)
                 .orElseThrow(() -> new RuntimeException("Recipe not found"));
 
         return recipe.getIngredients().stream()
@@ -232,7 +280,8 @@ public class RecipeCatalogService {
                 .map(item -> new RecipeInstructionDTO(item.getId(), item.getStepNumber(), item.getInstruction()))
                 .toList();
 
-        return new RecipeDTO(recipe.getId(), recipe.getUserId(), recipe.getVideoId(), recipe.getRecipeName(),
-                recipe.getCuisine(), recipe.getThumbnailUrl(), recipe.getCreatedAt(), ingredients, instructions);
+        return new RecipeDTO(recipe.getId(), recipe.getUserId(), recipe.getVideoId(), recipe.getYoutubeVideoId(),
+                recipe.getRecipeName(), recipe.getCuisine(), recipe.getThumbnailUrl(), recipe.getCreatedAt(),
+                ingredients, instructions);
     }
 }

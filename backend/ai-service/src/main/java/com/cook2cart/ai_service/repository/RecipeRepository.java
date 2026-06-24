@@ -31,6 +31,9 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
 
     List<Recipe> findByVideoId(Long videoId);
 
+    @Query("SELECT COUNT(r) > 0 FROM Recipe r WHERE r.videoId = :videoId")
+    boolean recipeExistsForVideo(@Param("videoId") Long videoId);
+
     // ---- ID-only queries (safe to paginate at SQL level, no collection fetch) ----
 
     @Query("""

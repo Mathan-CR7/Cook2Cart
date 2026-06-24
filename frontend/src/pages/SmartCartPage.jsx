@@ -57,6 +57,7 @@ const getIngredientQuantity = (suggestionGroup, extractedIngredients) => {
     ingredientName: match?.ingredientName || match?.name || suggestionGroup.ingredientName || 'Ingredient',
     recipeQuantity: match?.recipeQuantity ?? match?.quantity ?? suggestionGroup.recipeQuantity ?? '',
     recipeUnit: match?.recipeUnit ?? match?.unit ?? suggestionGroup.recipeUnit ?? '',
+    source: match?.source || suggestionGroup.source || null,
   };
 };
 
@@ -193,6 +194,7 @@ export default function SmartCartPage() {
         ingredientName: ingredient.ingredientName || ingredient.name || 'Ingredient',
         recipeQuantity: ingredient.recipeQuantity ?? ingredient.quantity ?? '',
         recipeUnit: ingredient.recipeUnit ?? ingredient.unit ?? '',
+        source: ingredient.source || null,
       }));
   }, [suggestionGroups, ingredientSource, removedIngredients]);
 

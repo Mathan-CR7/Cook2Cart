@@ -1,20 +1,10 @@
-# Videos
-data/videos/
-*.mp4
+# Python
+backend/python-transcript-service/.venv/
+__pycache__/
+*.pyc
 
-# Zip files
-*.zip
-frontend.zip
-
-# IDE
+# IntelliJ
 .idea/
-*.iml
 
-# Build files
-target/
-build/
-
-# Logs
-*.log
-
-/data/
+# Environment files
+.env

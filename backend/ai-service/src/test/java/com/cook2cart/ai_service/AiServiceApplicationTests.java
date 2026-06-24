@@ -7,15 +7,20 @@ import com.cook2cart.ai_service.service.RecipeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.client.RestTemplate;
+import org.mockito.Mockito;
 
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(properties = "gemini.api.key=")
+@SpringBootTest(properties = {"gemini.api.key=dummy-test-key", "youtube.api.key=dummy-test-key"})
 class AiServiceApplicationTests {
 
     @Autowired
@@ -23,6 +28,26 @@ class AiServiceApplicationTests {
 
     @Autowired
     private RecipeController recipeController;
+
+    @MockitoBean
+    private RestTemplate restTemplate;
+
+    private String createGeminiResponseJson(Object responseData) throws Exception {
+        String innerJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(responseData);
+        return "{\n" +
+               "  \"candidates\": [\n" +
+               "    {\n" +
+               "      \"content\": {\n" +
+               "        \"parts\": [\n" +
+               "          {\n" +
+               "            \"text\": " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(innerJson) + "\n" +
+               "          }\n" +
+               "        ]\n" +
+               "      }\n" +
+               "    }\n" +
+               "  ]\n" +
+               "}";
+    }
 
     @Test
     void contextLoads() {
@@ -38,6 +63,38 @@ class AiServiceApplicationTests {
                 "audio/mp3",
                 "mock-audio-data-greater-than-3mb-so-we-can-trigger-the-cookie-fallback".repeat(50000).getBytes()
         );
+
+        RecipeResponse expectedResponse = new RecipeResponse(
+                "en",
+                "To make the perfect chocolate chip cookies, you'll need the following ingredients. Start with one cup of unsalted butter, softened. Then add three quarters of a cup of granulated sugar and three quarters of a cup of packed brown sugar. Next, mix in two large eggs and two teaspoons of vanilla extract. For the dry ingredients, you will need two and a quarter cups of all purpose flour, one teaspoon of baking soda, and half a teaspoon of salt. Finally, fold in two cups of semi sweet chocolate chips.",
+                Arrays.asList(
+                        new com.cook2cart.ai_service.dto.Ingredient("unsalted butter", 1.0, "cup", false, "speech", 0.98),
+                        new com.cook2cart.ai_service.dto.Ingredient("granulated sugar", 0.75, "cup", false, "speech", 0.97),
+                        new com.cook2cart.ai_service.dto.Ingredient("packed brown sugar", 0.75, "cup", false, "speech", 0.97),
+                        new com.cook2cart.ai_service.dto.Ingredient("large eggs", 2.0, null, false, "speech", 0.95),
+                        new com.cook2cart.ai_service.dto.Ingredient("vanilla extract", 2.0, "teaspoon", false, "speech", 0.98),
+                        new com.cook2cart.ai_service.dto.Ingredient("all purpose flour", 2.25, "cup", false, "speech", 0.99),
+                        new com.cook2cart.ai_service.dto.Ingredient("baking soda", 1.0, "teaspoon", false, "speech", 0.96),
+                        new com.cook2cart.ai_service.dto.Ingredient("salt", 0.5, "teaspoon", false, "speech", 0.98),
+                        new com.cook2cart.ai_service.dto.Ingredient("semi sweet chocolate chips", 2.0, "cup", false, "speech", 0.98)
+                ),
+                Arrays.asList(
+                        "Preheat oven to 375°F (190°C).",
+                        "Cream the softened butter, granulated sugar, and brown sugar until smooth.",
+                        "Beat in the eggs one at a time, then stir in the vanilla extract.",
+                        "Combine the flour, baking soda, and salt, then gradually stir into the creamed mixture.",
+                        "Fold in the chocolate chips and drop large spoonfuls onto ungreased pans.",
+                        "Bake for 9 to 11 minutes or until golden brown."
+                )
+        );
+        expectedResponse.setNutrition(new com.cook2cart.ai_service.dto.Nutrition("200 kcal", "2g", "28g", "10g", "Vitamin A, Iron"));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
 
         RecipeResponse response = recipeService.processRecipeAudio(audioFile, "chocolate_chip_cookies");
         assertNotNull(response);
@@ -76,6 +133,34 @@ class AiServiceApplicationTests {
                 "audio/wav",
                 "mock-audio-data".getBytes()
         );
+
+        RecipeResponse expectedResponse = new RecipeResponse(
+                "en",
+                "Today we are going to make a simple pasta. First, boil some water and add eight ounces of spaghetti. While that's cooking, heat two tablespoons of olive oil in a pan. Add three cloves of minced garlic and cook until fragrant. Then, toss in one cup of cherry tomatoes, halved, and cook for about three minutes. Finally, mix in half a cup of grated parmesan cheese and a handful of fresh basil leaves. Season with salt and pepper to taste.",
+                Arrays.asList(
+                        new com.cook2cart.ai_service.dto.Ingredient("spaghetti", 8.0, "ounce", false, "speech", 0.97),
+                        new com.cook2cart.ai_service.dto.Ingredient("olive oil", 2.0, "tablespoon", false, "speech", 0.99),
+                        new com.cook2cart.ai_service.dto.Ingredient("minced garlic", 3.0, "clove", false, "speech", 0.95),
+                        new com.cook2cart.ai_service.dto.Ingredient("cherry tomatoes", 1.0, "cup", false, "speech", 0.96),
+                        new com.cook2cart.ai_service.dto.Ingredient("grated parmesan cheese", 0.5, "cup", false, "speech", 0.94),
+                        new com.cook2cart.ai_service.dto.Ingredient("fresh basil leaves", null, null, true, "vision", 0.85)
+                ),
+                Arrays.asList(
+                        "Bring a large pot of salted water to a boil and cook the spaghetti.",
+                        "Heat olive oil in a pan and fry the minced garlic until fragrant.",
+                        "Add the halved cherry tomatoes and cook for 3 minutes.",
+                        "Drain spaghetti and toss with the garlic and tomatoes.",
+                        "Top with parmesan cheese and fresh basil leaves."
+                )
+        );
+        expectedResponse.setNutrition(new com.cook2cart.ai_service.dto.Nutrition("350 kcal", "10g", "45g", "12g", "Vitamin C, Calcium"));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
 
         RecipeResponse response = recipeService.processRecipeAudio(audioFile, "simple_pasta_recipe");
         assertNotNull(response);
@@ -188,7 +273,7 @@ class AiServiceApplicationTests {
     }
 
     @Test
-    void testCombineIngredients_RegionalTranslationAndMerging() {
+    void testCombineIngredients_RegionalTranslationAndMerging() throws Exception {
         CombineSourcesRequest request = new CombineSourcesRequest(
                 "Add onions and mirchi.",
                 "Add onions",
@@ -196,12 +281,30 @@ class AiServiceApplicationTests {
                 2
         );
 
+        RecipeResponse expectedResponse = new RecipeResponse();
+        expectedResponse.setLanguageDetected("en");
+        expectedResponse.setEnglishTranscript("Add onions and mirchi.");
+        expectedResponse.setIngredients(Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("onion", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("mirchi", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("onion", null, null, false, "ocr", 0.90),
+                new com.cook2cart.ai_service.dto.Ingredient("Pyaz", null, null, false, "vision", 0.85),
+                new com.cook2cart.ai_service.dto.Ingredient("hari mirch", null, null, false, "vision", 0.85)
+        ));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         RecipeResponse response = recipeService.combineIngredients(request);
         assertNotNull(response);
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(4, ingredients.size());
+        assertEquals(2, ingredients.size());
 
         // Verify onion is merged and source combined
         com.cook2cart.ai_service.dto.Ingredient onion = ingredients.stream()
@@ -220,28 +323,10 @@ class AiServiceApplicationTests {
         assertEquals("speech+vision", greenChilli.getSource());
         // combined confidence: 1 - (1-0.95)*(1-0.85) = 1 - 0.05*0.15 = 1 - 0.0075 = 0.9925 -> 0.99
         assertEquals(0.99, greenChilli.getConfidence());
-
-        // Verify salt is injected and estimated
-        com.cook2cart.ai_service.dto.Ingredient salt = ingredients.stream()
-                .filter(i -> "salt".equals(i.getName()))
-                .findFirst().orElse(null);
-        assertNotNull(salt);
-        assertTrue(salt.isEstimated());
-        assertEquals(4.0, salt.getQuantity());
-        assertEquals("g", salt.getUnit());
-
-        // Verify oil is injected and estimated
-        com.cook2cart.ai_service.dto.Ingredient oil = ingredients.stream()
-                .filter(i -> "oil".equals(i.getName()))
-                .findFirst().orElse(null);
-        assertNotNull(oil);
-        assertTrue(oil.isEstimated());
-        assertEquals(30.0, oil.getQuantity());
-        assertEquals("ml", oil.getUnit());
     }
 
     @Test
-    void testCombineIngredients_OcrOrVisionOnlySources() {
+    void testCombineIngredients_OcrOrVisionOnlySources() throws Exception {
         CombineSourcesRequest request = new CombineSourcesRequest(
                 "Boil spaghetti.",
                 "Add 1 tablespoon olive oil",
@@ -249,12 +334,28 @@ class AiServiceApplicationTests {
                 2
         );
 
+        RecipeResponse expectedResponse = new RecipeResponse();
+        expectedResponse.setLanguageDetected("en");
+        expectedResponse.setEnglishTranscript("Boil spaghetti.");
+        expectedResponse.setIngredients(Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("spaghetti", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("olive oil", 1.0, "tablespoon", false, "ocr", 0.90),
+                new com.cook2cart.ai_service.dto.Ingredient("fresh basil leaves", null, null, true, "vision", 0.85)
+        ));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         RecipeResponse response = recipeService.combineIngredients(request);
         assertNotNull(response);
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(4, ingredients.size());
+        assertEquals(3, ingredients.size());
 
         // Spaghetti: speech
         com.cook2cart.ai_service.dto.Ingredient spaghetti = ingredients.stream()
@@ -282,19 +383,10 @@ class AiServiceApplicationTests {
         assertEquals("vision", basil.getSource());
         assertEquals(0.85, basil.getConfidence());
         assertTrue(basil.isEstimated());
-
-        // Salt: injected and estimated
-        com.cook2cart.ai_service.dto.Ingredient salt = ingredients.stream()
-                .filter(i -> "salt".equals(i.getName()))
-                .findFirst().orElse(null);
-        assertNotNull(salt);
-        assertTrue(salt.isEstimated());
-        assertEquals(4.0, salt.getQuantity());
-        assertEquals("g", salt.getUnit());
     }
 
     @Test
-    void testCombineIngredients_QuantityEstimationByPeopleCount() {
+    void testCombineIngredients_QuantityEstimationByPeopleCount() throws Exception {
         CombineSourcesRequest request = new CombineSourcesRequest(
                 "This serves 3 people.",
                 "",
@@ -302,12 +394,27 @@ class AiServiceApplicationTests {
                 3
         );
 
+        RecipeResponse expectedResponse = new RecipeResponse();
+        expectedResponse.setLanguageDetected("en");
+        expectedResponse.setEnglishTranscript("This serves 3 people.");
+        expectedResponse.setIngredients(Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("onion", null, null, false, "vision", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("cooking oil", null, null, false, "vision", 0.95)
+        ));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         RecipeResponse response = recipeService.combineIngredients(request);
         assertNotNull(response);
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(3, ingredients.size());
+        assertEquals(2, ingredients.size());
 
         // Onion: vision, serves 3 -> 3 * 50 = 150g
         com.cook2cart.ai_service.dto.Ingredient onion = ingredients.stream()
@@ -328,19 +435,10 @@ class AiServiceApplicationTests {
         assertTrue(oil.isEstimated());
         assertEquals(45.0, oil.getQuantity());
         assertEquals("ml", oil.getUnit());
-
-        // Salt: injected and estimated for serves 3 -> 6.0g
-        com.cook2cart.ai_service.dto.Ingredient salt = ingredients.stream()
-                .filter(i -> "salt".equals(i.getName()))
-                .findFirst().orElse(null);
-        assertNotNull(salt);
-        assertTrue(salt.isEstimated());
-        assertEquals(6.0, salt.getQuantity());
-        assertEquals("g", salt.getUnit());
     }
 
     @Test
-    void testCombineIngredients_MasalaInference() {
+    void testCombineIngredients_MasalaInference() throws Exception {
         CombineSourcesRequest request = new CombineSourcesRequest(
                 "Roast coriander seeds, cumin seeds, cloves and cinnamon. Grind them into powder. Later add one spoon masala.",
                 "Add 1 tsp masala",
@@ -348,14 +446,31 @@ class AiServiceApplicationTests {
                 2
         );
 
+        RecipeResponse expectedResponse = new RecipeResponse();
+        expectedResponse.setLanguageDetected("en");
+        expectedResponse.setEnglishTranscript("Roast coriander seeds, cumin seeds, cloves and cinnamon. Grind them into powder. Later add one spoon masala.");
+        expectedResponse.setIngredients(Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("coriander seeds", 1.0, null, false, "speech+ocr", 1.0),
+                new com.cook2cart.ai_service.dto.Ingredient("cumin seeds", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("cloves", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("cinnamon", null, null, false, "speech", 0.95)
+        ));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         RecipeResponse response = recipeService.combineIngredients(request);
         assertNotNull(response);
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
         
-        // "masala" should be removed, and 4 constituent ingredients should be inferred, plus salt and oil injected
-        assertEquals(6, ingredients.size());
+        // "masala" should be removed, and 4 constituent ingredients should be inferred
+        assertEquals(4, ingredients.size());
         
         // Assert absence of masala
         assertTrue(ingredients.stream().noneMatch(i -> i.getName().contains("masala")));
@@ -374,18 +489,33 @@ class AiServiceApplicationTests {
         assertTrue(ingredients.stream().anyMatch(i -> "cumin seeds".equals(i.getName())));
         assertTrue(ingredients.stream().anyMatch(i -> "cloves".equals(i.getName())));
         assertTrue(ingredients.stream().anyMatch(i -> "cinnamon".equals(i.getName())));
-        assertTrue(ingredients.stream().anyMatch(i -> "salt".equals(i.getName())));
-        assertTrue(ingredients.stream().anyMatch(i -> "oil".equals(i.getName())));
     }
 
     @Test
-    void testCombineIngredients_ControllerEndpoint() {
+    void testCombineIngredients_ControllerEndpoint() throws Exception {
         CombineSourcesRequest request = new CombineSourcesRequest(
                 "Add eggs and milk.",
                 "Add 1 cup milk",
                 Arrays.asList("egg"),
                 2
         );
+
+        RecipeResponse expectedResponse = new RecipeResponse();
+        expectedResponse.setLanguageDetected("en");
+        expectedResponse.setEnglishTranscript("Add eggs and milk.");
+        expectedResponse.setIngredients(Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("egg", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("milk", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("milk", 1.0, "cup", false, "ocr", 0.90),
+                new com.cook2cart.ai_service.dto.Ingredient("egg", null, null, false, "vision", 0.85)
+        ));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
 
         ResponseEntity<RecipeResponse> responseEntity = recipeController.combineIngredients(request);
         assertNotNull(responseEntity);
@@ -396,11 +526,11 @@ class AiServiceApplicationTests {
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(4, ingredients.size());
+        assertEquals(2, ingredients.size());
     }
 
     @Test
-    void testSynonymTranslationAndVarietyDetection() {
+    void testSynonymTranslationAndVarietyDetection() throws Exception {
         CombineSourcesRequest request = new CombineSourcesRequest(
                 "Use vendakkai and kathirikai.",
                 "Add small onion and natuthakali.",
@@ -408,12 +538,31 @@ class AiServiceApplicationTests {
                 2
         );
 
+        RecipeResponse expectedResponse = new RecipeResponse();
+        expectedResponse.setLanguageDetected("en");
+        expectedResponse.setEnglishTranscript("Use vendakkai and kathirikai.");
+        expectedResponse.setIngredients(Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("vendakkai", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("kathirikai", null, null, false, "speech", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("small onion", null, null, false, "ocr", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("natuthakali", null, null, false, "ocr", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("Thayir", null, null, false, "vision", 0.95),
+                new com.cook2cart.ai_service.dto.Ingredient("kothamalli", null, null, false, "vision", 0.95)
+        ));
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         RecipeResponse response = recipeService.combineIngredients(request);
         assertNotNull(response);
         
         List<com.cook2cart.ai_service.dto.Ingredient> ingredients = response.getIngredients();
         assertNotNull(ingredients);
-        assertEquals(8, ingredients.size());
+        assertEquals(6, ingredients.size());
         
         // Assertions for synonyms/translations
         assertTrue(ingredients.stream().anyMatch(i -> "lady finger".equals(i.getName())));
@@ -424,21 +573,28 @@ class AiServiceApplicationTests {
         // Assertions for varieties
         assertTrue(ingredients.stream().anyMatch(i -> "small onion".equals(i.getName())));
         assertTrue(ingredients.stream().anyMatch(i -> "nattu tomato".equals(i.getName())));
-
-        // Assertions for injected essentials
-        assertTrue(ingredients.stream().anyMatch(i -> "salt".equals(i.getName())));
-        assertTrue(ingredients.stream().anyMatch(i -> "oil".equals(i.getName())));
     }
 
     @Test
-    void testParseIngredients_InjectsEssentials() {
+    void testParseIngredients_NoInjectsEssentials() throws Exception {
         com.cook2cart.ai_service.dto.Ingredient egg = new com.cook2cart.ai_service.dto.Ingredient("egg", 2.0, "pcs", false, "speech", 0.95);
         List<com.cook2cart.ai_service.dto.Ingredient> input = Arrays.asList(egg);
 
+        List<com.cook2cart.ai_service.dto.Ingredient> expectedResponse = Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("egg", 2.0, "pcs", false, "speech", 0.95)
+        );
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         List<com.cook2cart.ai_service.dto.Ingredient> result = recipeService.parseIngredients(input, 3);
         assertNotNull(result);
-        // Egg + Salt + Oil = 3 ingredients
-        assertEquals(3, result.size());
+        // Only the exact ingredient generated by the AI should be returned.
+        assertEquals(1, result.size());
 
         // Verify egg properties
         com.cook2cart.ai_service.dto.Ingredient eggRes = result.stream()
@@ -446,27 +602,15 @@ class AiServiceApplicationTests {
                 .findFirst().orElse(null);
         assertNotNull(eggRes);
 
-        // Verify salt properties estimated for 3 servings
-        com.cook2cart.ai_service.dto.Ingredient salt = result.stream()
-                .filter(i -> "salt".equals(i.getName()))
-                .findFirst().orElse(null);
-        assertNotNull(salt);
-        assertTrue(salt.isEstimated());
-        assertEquals(6.0, salt.getQuantity());
-        assertEquals("g", salt.getUnit());
-
-        // Verify oil properties estimated for 3 servings
-        com.cook2cart.ai_service.dto.Ingredient oil = result.stream()
-                .filter(i -> "oil".equals(i.getName()))
-                .findFirst().orElse(null);
-        assertNotNull(oil);
-        assertTrue(oil.isEstimated());
-        assertEquals(45.0, oil.getQuantity());
-        assertEquals("ml", oil.getUnit());
+        // Verify salt and oil are NOT present
+        boolean hasSalt = result.stream().anyMatch(i -> "salt".equals(i.getName()));
+        boolean hasOil = result.stream().anyMatch(i -> "oil".equals(i.getName()));
+        assertFalse(hasSalt);
+        assertFalse(hasOil);
     }
 
     @Test
-    void testParseIngredients_DeduplicatesDuplicates() {
+    void testParseIngredients_DeduplicatesDuplicates() throws Exception {
         com.cook2cart.ai_service.dto.Ingredient salt1 = new com.cook2cart.ai_service.dto.Ingredient(
             "salt", 1.0, "tablespoon", 1.0, "g", true, "speech", 0.8
         );
@@ -478,11 +622,25 @@ class AiServiceApplicationTests {
         );
         
         List<com.cook2cart.ai_service.dto.Ingredient> input = Arrays.asList(salt1, salt2, flour);
+
+        List<com.cook2cart.ai_service.dto.Ingredient> expectedResponse = Arrays.asList(
+                new com.cook2cart.ai_service.dto.Ingredient("salt", 1.0, "tablespoon", 1.0, "g", true, "speech", 0.8),
+                new com.cook2cart.ai_service.dto.Ingredient("salt", 0.5, "teaspoon", 3.0, "g", true, "speech", 0.8),
+                new com.cook2cart.ai_service.dto.Ingredient("all-purpose flour", 1.5, "cup", 180.0, "g", false, "speech", 0.95)
+        );
+        String mockResponseJson = createGeminiResponseJson(expectedResponse);
+        
+        Mockito.when(restTemplate.postForEntity(
+                Mockito.anyString(),
+                Mockito.any(HttpEntity.class),
+                Mockito.eq(String.class)
+        )).thenReturn(new ResponseEntity<>(mockResponseJson, HttpStatus.OK));
+
         List<com.cook2cart.ai_service.dto.Ingredient> result = recipeService.parseIngredients(input, 2);
         
         assertNotNull(result);
-        // Should contain salt (merged), all-purpose flour, oil (injected)
-        assertEquals(3, result.size());
+        // Should contain salt (merged), all-purpose flour
+        assertEquals(2, result.size());
         
         // Find merged salt
         com.cook2cart.ai_service.dto.Ingredient salt = result.stream()

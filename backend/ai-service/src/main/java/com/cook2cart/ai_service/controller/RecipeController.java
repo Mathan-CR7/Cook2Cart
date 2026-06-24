@@ -82,6 +82,20 @@ public class RecipeController {
         return ResponseEntity.notFound().build();
     }
 
+    @PostMapping(value = "/process-workflow", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<java.util.Map<String, Object>> processVideoWorkflow(
+            @RequestParam("videoId") String videoId,
+            @RequestParam("youtubeUrl") String youtubeUrl,
+            @RequestParam("dbVideoId") Long dbVideoId,
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam("recipeName") String recipeName,
+            @RequestParam("thumbnailUrl") String thumbnailUrl
+    ) {
+        log.info("Process video workflow endpoint called for videoId: {}, dbVideoId: {}, userId: {}", videoId, dbVideoId, userId);
+        java.util.Map<String, Object> result = recipeService.processVideoWorkflow(videoId, youtubeUrl, dbVideoId, userId, recipeName, thumbnailUrl);
+        return ResponseEntity.ok(result);
+    }
+
     public ResponseEntity<RecipeResponse> processRecipeAudio(MultipartFile file) {
         return processRecipeAudio(file, null);
     }

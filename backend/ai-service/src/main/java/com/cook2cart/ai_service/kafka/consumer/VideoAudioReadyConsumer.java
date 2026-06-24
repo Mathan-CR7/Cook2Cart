@@ -72,6 +72,11 @@ public class VideoAudioReadyConsumer {
         }
 
         try {
+            if (event.getVideoId() != null && recipeCatalogService.recipeExistsForVideo(event.getVideoId())) {
+                log.info("Recipe already exists in database for videoId={}. Skipping duplicate creation.", event.getVideoId());
+                return;
+            }
+
             RecipeResponse response = recipeService.processRecipeAudio(audioFile, cacheVideoId);
 
             if (response == null) {
@@ -122,6 +127,7 @@ public class VideoAudioReadyConsumer {
         return new RecipeCreateRequest(
                 event.getUserId(),
                 event.getVideoId(),
+                null, // youtubeVideoId not available from Kafka event
                 buildRecipeName(event),
                 null,
                 null,

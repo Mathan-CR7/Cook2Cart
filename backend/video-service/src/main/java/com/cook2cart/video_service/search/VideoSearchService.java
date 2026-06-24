@@ -118,9 +118,9 @@ public class VideoSearchService {
 
         NativeQuery query = NativeQuery.builder()
                 .withQuery(q -> q.bool(b -> b
-                        .should(s -> s.match(m -> m.field("title").query(queryText).fuzziness("AUTO").boost(2.0f)))
-                        .should(s -> s.match(m -> m.field("searchKeyword").query(queryText).fuzziness("AUTO")))
-                        .should(s -> s.match(m -> m.field("channelName").query(queryText).fuzziness("AUTO")))
+                        .should(s -> s.match(m -> m.field("title").query(queryText).fuzziness("AUTO").operator(co.elastic.clients.elasticsearch._types.query_dsl.Operator.And).boost(2.0f)))
+                        .should(s -> s.match(m -> m.field("searchKeyword").query(queryText).fuzziness("AUTO").operator(co.elastic.clients.elasticsearch._types.query_dsl.Operator.And)))
+                        .should(s -> s.match(m -> m.field("channelName").query(queryText).fuzziness("AUTO").operator(co.elastic.clients.elasticsearch._types.query_dsl.Operator.And)))
                 ))
                 .withPageable(PageRequest.of(0, 25))
                 .build();
@@ -143,8 +143,8 @@ public class VideoSearchService {
                 .withQuery(q -> q.bool(b -> b
                         .must(m -> m.term(t -> t.field("userId").value(userId)))
                         .must(m -> m.term(t -> t.field("actionType").value(actionType)))
-                        .should(s -> s.match(m -> m.field("title").query(queryText).fuzziness("AUTO").boost(2.0f)))
-                        .should(s -> s.match(m -> m.field("channelName").query(queryText).fuzziness("AUTO")))
+                        .should(s -> s.match(m -> m.field("title").query(queryText).fuzziness("AUTO").operator(co.elastic.clients.elasticsearch._types.query_dsl.Operator.And).boost(2.0f)))
+                        .should(s -> s.match(m -> m.field("channelName").query(queryText).fuzziness("AUTO").operator(co.elastic.clients.elasticsearch._types.query_dsl.Operator.And)))
                         .minimumShouldMatch("1")
                 ))
                 .withPageable(PageRequest.of(0, 25))

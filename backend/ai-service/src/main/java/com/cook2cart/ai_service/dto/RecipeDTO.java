@@ -7,6 +7,7 @@ public record RecipeDTO(
         Long id,
         Long userId,
         Long videoId,
+        String youtubeVideoId,
         String recipeName,
         String cuisine,
         String thumbnailUrl,

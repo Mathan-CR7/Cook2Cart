@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -17,6 +18,7 @@ public class RecipeCacheService {
     private static final Duration RECIPE_CACHE_TTL = Duration.ofHours(24);
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public Optional<RecipeResponse> getRecipe(String videoId) {
         if (videoId == null || videoId.isBlank()) {
@@ -26,9 +28,17 @@ public class RecipeCacheService {
         String key = buildKey(videoId);
         Object cachedValue = redisTemplate.opsForValue().get(key);
 
-        if (cachedValue instanceof RecipeResponse recipeResponse) {
-            log.info("CACHE HIT - Returning recipe from Redis for key: {}", key);
-            return Optional.of(recipeResponse);
+        if (cachedValue != null) {
+            log.info("CACHE HIT - Found key: {} with type: {}", key, cachedValue.getClass().getName());
+            if (cachedValue instanceof RecipeResponse recipeResponse) {
+                return Optional.of(recipeResponse);
+            }
+            try {
+                RecipeResponse recipeResponse = objectMapper.convertValue(cachedValue, RecipeResponse.class);
+                return Optional.of(recipeResponse);
+            } catch (Exception e) {
+                log.warn("Failed to convert cached value to RecipeResponse for key {}: {}", key, e.getMessage());
+            }
         }
 
         log.info("CACHE MISS - Processing video for key: {}", key);

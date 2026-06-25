@@ -37,14 +37,7 @@ echo ">>> [4/5] Testing Gemini API Key..."
 PROP_FILE="backend/ai-service/src/main/resources/application.properties"
 if [ -f "$PROP_FILE" ]; then
     GEMINI_KEY=$(grep "^gemini.api.key=" "$PROP_FILE" | cut -d'=' -f2 | tr -d '\r\n ')
-    GEMINI_URL=$(grep "^gemini.api.url=" "$PROP_FILE" | cut -d'=' -f2 | tr -d '\r\n ')
     
-    # If URL is not in properties, use default
-    if [ -z "$GEMINI_URL" ]; then
-        GEMINI_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    fi
-    
-    echo "  Configured URL: $GEMINI_URL"
     if [ -z "$GEMINI_KEY" ]; then
         echo "  ERROR: No Gemini API key found in $PROP_FILE"
     else
@@ -52,17 +45,33 @@ if [ -f "$PROP_FILE" ]; then
         MASKED_KEY="${GEMINI_KEY:0:8}...${GEMINI_KEY: -5}"
         echo "  Testing key: $MASKED_KEY"
         
-        # Make the request to Gemini
-        RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "${GEMINI_URL}?key=${GEMINI_KEY}" \
+        # Test Gemini 2.0 Flash
+        echo "  --- Model: gemini-2.0-flash ---"
+        RESPONSE_20=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}" \
             -H "Content-Type: application/json" \
             -d '{"contents": [{"parts":[{"text": "Hello"}]}]}')
-            
-        HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
-        BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+        STATUS_20=$(echo "$RESPONSE_20" | grep "HTTP_STATUS:" | cut -d':' -f2)
+        BODY_20=$(echo "$RESPONSE_20" | sed '/HTTP_STATUS:/d')
+        echo "  Status: $STATUS_20"
+        if [ "$STATUS_20" != "200" ]; then
+            echo "  Error: $(echo "$BODY_20" | grep -o '"message": "[^"]*' | cut -d'"' -f4)"
+        else
+            echo "  SUCCESS!"
+        fi
         
-        echo "  Gemini Response Status: $HTTP_STATUS"
-        echo "  Gemini Response Body:"
-        echo "  $BODY"
+        # Test Gemini 1.5 Flash
+        echo "  --- Model: gemini-1.5-flash ---"
+        RESPONSE_15=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"contents": [{"parts":[{"text": "Hello"}]}]}')
+        STATUS_15=$(echo "$RESPONSE_15" | grep "HTTP_STATUS:" | cut -d':' -f2)
+        BODY_15=$(echo "$RESPONSE_15" | sed '/HTTP_STATUS:/d')
+        echo "  Status: $STATUS_15"
+        if [ "$STATUS_15" != "200" ]; then
+            echo "  Error: $(echo "$BODY_15" | grep -o '"message": "[^"]*' | cut -d'"' -f4)"
+        else
+            echo "  SUCCESS!"
+        fi
     fi
 else
     echo "  ERROR: $PROP_FILE not found."

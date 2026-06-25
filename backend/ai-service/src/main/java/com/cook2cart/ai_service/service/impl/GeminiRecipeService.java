@@ -54,7 +54,7 @@ public class GeminiRecipeService implements RecipeService {
     @Value("${gemini.api.keys:}")
     private String apiKeysString;
 
-    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent}")
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent}")
     private String geminiUrl;
 
     @Value("${youtube.api.key:}")

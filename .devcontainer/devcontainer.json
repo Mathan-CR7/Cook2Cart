@@ -1,0 +1,58 @@
+{
+  "name": "Cook2Cart Codespace",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "installJdk": true
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [5173, 8080, 8761, 8083, 8084, 8082, 8085, 8086, 8089, 9200],
+  "portsAttributes": {
+    "5173": {
+      "label": "Frontend (Vite)",
+      "onAutoForward": "openBrowser"
+    },
+    "8080": {
+      "label": "API Gateway"
+    },
+    "8761": {
+      "label": "Eureka Service Registry"
+    },
+    "8083": {
+      "label": "User Service"
+    },
+    "8084": {
+      "label": "Product Service"
+    },
+    "8082": {
+      "label": "Cart Service"
+    },
+    "8085": {
+      "label": "AI Service"
+    },
+    "8086": {
+      "label": "Video Service (Docker)"
+    },
+    "8089": {
+      "label": "Python Transcript Service"
+    },
+    "9200": {
+      "label": "Elasticsearch"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-spring-boot-dashboard",
+        "ms-azuretools.vscode-docker",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

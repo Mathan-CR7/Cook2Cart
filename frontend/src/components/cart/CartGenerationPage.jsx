@@ -6,6 +6,27 @@ import ConfirmCartModal from './ConfirmCartModal';
 
 const steps = ['Video Processed', 'Ingredients Extracted', 'Location Selected', 'Cart Generated'];
 
+const SOURCE_LABELS = {
+  description: { label: 'Description', color: 'text-blue-600 bg-blue-50' },
+  transcript:  { label: 'Transcript',  color: 'text-purple-600 bg-purple-50' },
+  audio:       { label: 'Audio',       color: 'text-green-600 bg-green-50' },
+  image:       { label: 'Video Frame', color: 'text-orange-600 bg-orange-50' },
+};
+
+const getExtractionSourceLabel = (ingredients) => {
+  if (!ingredients || !ingredients.length) return null;
+  const counts = {};
+  ingredients.forEach((ing) => {
+    const src = (ing.source || '').toLowerCase().replace(/_/g, '');
+    for (const k of Object.keys(SOURCE_LABELS)) {
+      if (src.includes(k)) { counts[k] = (counts[k] || 0) + 1; break; }
+    }
+  });
+  if (!Object.keys(counts).length) return null;
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  return SOURCE_LABELS[top];
+};
+
 export default function CartGenerationPage({
   recipeTitle,
   recipeId,
@@ -101,6 +122,8 @@ export default function CartGenerationPage({
             {steps.map((step, index) => {
               const done = index < steps.length - 1;
               const active = index === steps.length - 1;
+              const isExtractStep = index === 1;
+              const srcLabel = isExtractStep ? getExtractionSourceLabel(ingredients) : null;
               return (
                 <div key={step} className="flex min-w-0 flex-1 items-center last:flex-none">
                   <div className="flex min-w-[120px] flex-col items-center gap-1">
@@ -110,6 +133,11 @@ export default function CartGenerationPage({
                       {done ? <span className="material-icon !text-lg">check</span> : index + 1}
                     </span>
                     <span className={`text-xs font-semibold ${active ? 'text-orange-600' : 'text-gray-700'}`}>{step}</span>
+                    {srcLabel && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${srcLabel.color}`}>
+                        {srcLabel.label}
+                      </span>
+                    )}
                   </div>
                   {index < steps.length - 1 && (
                     <div className={`mx-2 h-0.5 flex-1 ${index < steps.length - 2 ? 'bg-green-700' : 'bg-orange-500'}`} />

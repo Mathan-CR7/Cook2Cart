@@ -105,10 +105,11 @@ public class GeminiRecipeService implements RecipeService {
         int maxAttempts = apiKeysList.size();
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             String currentKey = getActiveApiKey();
-            String url = geminiUrl + "?key=" + currentKey;
+            String url = geminiUrl;
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-goog-api-key", currentKey);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
             int keyIdx = Math.abs(currentKeyIndex.get()) % apiKeysList.size();
@@ -1068,9 +1069,24 @@ public class GeminiRecipeService implements RecipeService {
         log.info("Generating recipe and cart in backend for videoId={}, successStatus={}", youtubeVideoId, successStatus);
         Map<String, Object> result = new HashMap<>();
         
+        // Derive a clean source tag from the workflow status
+        String extractionSource = "description";
+        if (successStatus != null) {
+            String s = successStatus.toLowerCase();
+            if (s.contains("transcript")) extractionSource = "transcript";
+            else if (s.contains("audio"))  extractionSource = "audio";
+            else if (s.contains("cache"))  extractionSource = "description"; // cache was originally from description
+            else if (s.contains("description")) extractionSource = "description";
+        }
+        final String resolvedSource = extractionSource;
+
         // 1. Create RecipeCreateRequest
         List<RecipeIngredientRequest> ingRequests = new ArrayList<>();
         for (Ingredient ing : recipeResponse.getIngredients()) {
+            // Use extraction method as source if Gemini didn't return one
+            String source = (ing.getSource() != null && !ing.getSource().isBlank())
+                    ? ing.getSource()
+                    : resolvedSource;
             ingRequests.add(new RecipeIngredientRequest(
                     ing.getName(),
                     ing.getRecipeQuantity(),
@@ -1078,7 +1094,7 @@ public class GeminiRecipeService implements RecipeService {
                     ing.getRecipeQuantity(),
                     ing.getRecipeUnit(),
                     ing.isEstimated(),
-                    ing.getSource(),
+                    source,
                     ing.getConfidence()
             ));
         }

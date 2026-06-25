@@ -27,9 +27,16 @@ for port in 8761 8080 8085 8086 8089; do
 done
 echo ""
 
-# 3. Test Connection to Video Service
-echo ">>> [3/5] Testing connection to Video Service (Port 8086)..."
-curl -s -o /dev/null -w "  HTTP Status Code: %{http_code}\n" http://localhost:8086/video/process -X POST -H "Content-Type: application/json" -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' || echo "  Failed to connect to Video Service."
+# 3. Test Connection to Video Service with Failing Video URL
+echo ">>> [3/5] Testing connection to Video Service (Port 8086) for video BQdgns9xzAQ..."
+RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "http://localhost:8086/video/process" \
+    -H "Content-Type: application/json" \
+    -d '{"url":"https://www.youtube.com/watch?v=BQdgns9xzAQ"}')
+STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+
+echo "  HTTP Status Code: $STATUS"
+echo "  Response Body: $BODY"
 echo ""
 
 # 4. Extract and Test Gemini API Key from application.properties
@@ -48,13 +55,8 @@ if [ -f "$PROP_FILE" ]; then
         echo "  Testing candidate models to find one that returns 200 OK..."
         
         MODELS=(
-            "gemini-2.5-flash-lite"
-            "gemini-2.0-flash-lite"
             "gemini-2.5-flash"
-            "gemini-flash-latest"
             "gemini-flash-lite-latest"
-            "gemini-pro-latest"
-            "gemini-2.0-flash"
         )
         
         for model in "${MODELS[@]}"; do
@@ -77,9 +79,9 @@ fi
 echo ""
 
 # 5. Check logs of Video Service
-echo ">>> [5/5] Checking last 10 lines of Video Service logs..."
+echo ">>> [5/5] Checking last 40 lines of Video Service logs..."
 if command -v docker >/dev/null 2>&1; then
-    docker logs cook2cart-video-service-8086 --tail 15 || echo "  Could not retrieve video-service container logs."
+    docker logs cook2cart-video-service-8086 --tail 40 || echo "  Could not retrieve video-service container logs."
 else
     echo "  Docker not available."
 fi

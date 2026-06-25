@@ -44,30 +44,32 @@ if [ -f "$PROP_FILE" ]; then
         # Mask key for safety
         MASKED_KEY="${GEMINI_KEY:0:8}...${GEMINI_KEY: -5}"
         echo "  Testing key: $MASKED_KEY"
+        echo ""
+        echo "  Testing candidate models to find one that returns 200 OK..."
         
-        # Test Gemini 2.0 Flash
-        echo "  --- Model: gemini-2.0-flash ---"
-        RESPONSE_20=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}" \
-            -H "Content-Type: application/json" \
-            -d '{"contents": [{"parts":[{"text": "Hello"}]}]}')
-        STATUS_20=$(echo "$RESPONSE_20" | grep "HTTP_STATUS:" | cut -d':' -f2)
-        BODY_20=$(echo "$RESPONSE_20" | sed '/HTTP_STATUS:/d')
-        echo "  Status: $STATUS_20"
+        MODELS=(
+            "gemini-2.5-flash-lite"
+            "gemini-2.0-flash-lite"
+            "gemini-2.5-flash"
+            "gemini-flash-latest"
+            "gemini-flash-lite-latest"
+            "gemini-pro-latest"
+            "gemini-2.0-flash"
+        )
         
-        # Test List Models
-        echo "  --- Querying Available Models via API ---"
-        RESPONSE_LIST=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X GET "https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_KEY}")
-        STATUS_LIST=$(echo "$RESPONSE_LIST" | grep "HTTP_STATUS:" | cut -d':' -f2)
-        BODY_LIST=$(echo "$RESPONSE_LIST" | sed '/HTTP_STATUS:/d')
-        echo "  Status ListModels: $STATUS_LIST"
-        
-        if [ "$STATUS_LIST" = "200" ]; then
-            echo "  Available Models in your API key:"
-            echo "$BODY_LIST" | grep -o '"name": "models/[^"]*' | cut -d'/' -f2
-        else
-            echo "  Failed to list models. Error:"
-            echo "$BODY_LIST"
-        fi
+        for model in "${MODELS[@]}"; do
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}" \
+                -H "Content-Type: application/json" \
+                -d '{"contents": [{"parts":[{"text": "Hello"}]}]}')
+            STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+            
+            if [ "$STATUS" = "200" ]; then
+                echo "  [SUCCESS] Model: $model -> Status: 200 OK"
+            else
+                ERR_MSG=$(echo "$RESPONSE" | grep -o '"message": "[^"]*' | cut -d'"' -f4 | head -n 1)
+                echo "  [FAILED ] Model: $model -> Status: $STATUS (Error: $ERR_MSG)"
+            fi
+        done
     fi
 else
     echo "  ERROR: $PROP_FILE not found."

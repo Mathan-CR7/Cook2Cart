@@ -107,22 +107,58 @@ public class VideoService {
     }
 
     private void downloadAudioOnly(String youtubeUrl, String outputPath) throws Exception {
-        log.info("Starting direct audio download from YouTube...");
+        log.info("Starting audio download from YouTube...");
 
-        ProcessBuilder processBuilder = new ProcessBuilder(
-                ytDlpPath,
-                "-f", "bestaudio",
-                "--extract-audio",
-                "--audio-format", "mp3",
-                "--ffmpeg-location", ffmpegPath,
-                "--no-playlist",
-                "--force-overwrites",
-                "-o", outputPath,
-                youtubeUrl
-        );
+        // Try direct download first (extremely fast and robust for local/non-blocked environments)
+        try {
+            log.info("Attempting direct audio download (no proxy)...");
+            ProcessBuilder directBuilder = createDownloadProcessBuilder(youtubeUrl, outputPath, false);
+            runCommand("Audio download & extraction (Direct)", directBuilder);
+            log.info("Audio downloaded and extracted directly successfully.");
+            return;
+        } catch (Exception ex) {
+            log.warn("Direct audio download failed: {}. Retrying with proxy...", ex.getMessage());
+        }
 
-        runCommand("Audio download & extraction", processBuilder);
-        log.info("Audio downloaded and extracted directly to: {}", outputPath);
+        // Fallback to proxy
+        log.info("Attempting audio download using proxy...");
+        ProcessBuilder proxyBuilder = createDownloadProcessBuilder(youtubeUrl, outputPath, true);
+        runCommand("Audio download & extraction (Proxy)", proxyBuilder);
+        log.info("Audio downloaded and extracted via proxy successfully.");
+    }
+
+    private ProcessBuilder createDownloadProcessBuilder(String youtubeUrl, String outputPath, boolean useProxy) {
+        java.util.List<String> command = new java.util.ArrayList<>();
+        command.add(ytDlpPath);
+        command.add("-f");
+        command.add("bestaudio");
+        command.add("--extract-audio");
+        command.add("--audio-format");
+        command.add("mp3");
+
+        if (ffmpegPath != null && !ffmpegPath.trim().isEmpty() && !ffmpegPath.equals("ffmpeg")) {
+            command.add("--ffmpeg-location");
+            command.add(ffmpegPath);
+        }
+
+        command.add("--no-playlist");
+        command.add("--force-overwrites");
+        command.add("-o");
+        command.add(outputPath);
+        command.add(youtubeUrl);
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+
+        if (!useProxy) {
+            processBuilder.environment().put("HTTP_PROXY", "");
+            processBuilder.environment().put("HTTPS_PROXY", "");
+            processBuilder.environment().put("ALL_PROXY", "");
+            processBuilder.environment().put("http_proxy", "");
+            processBuilder.environment().put("https_proxy", "");
+            processBuilder.environment().put("all_proxy", "");
+        }
+
+        return processBuilder;
     }
 
     private void createDummyVideoFile(String outputPath) {

@@ -1,3 +1,4 @@
+import os
 import sys
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -25,10 +26,30 @@ def get_transcript():
     if not video_id:
         return jsonify({"error": "video_id parameter is required"}), 400
     
+    proxy = request.args.get('proxy') or os.environ.get('YOUTUBE_PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+    proxies = None
+    if proxy:
+        masked_proxy = proxy
+        if "@" in proxy:
+            try:
+                parts = proxy.split("@")
+                protocol_host = parts[0].split("://")
+                if len(protocol_host) > 1:
+                    masked_proxy = f"{protocol_host[0]}://***:***@{parts[1]}"
+                else:
+                    masked_proxy = f"***:***@{parts[1]}"
+            except Exception:
+                masked_proxy = "masked_proxy"
+        print(f"Using proxy: {masked_proxy}", flush=True)
+        proxies = {
+            "http": proxy,
+            "https": proxy
+        }
+    
     try:
         # Check and get the transcript list
         if hasattr(YouTubeTranscriptApi, 'list_transcripts'):
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
         else:
             transcript_list = YouTubeTranscriptApi().list(video_id)
         

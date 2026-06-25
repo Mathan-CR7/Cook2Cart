@@ -36,6 +36,13 @@ services:
     volumes:
       - cook2cart_redis_data:/data
 
+  tor-proxy:
+    image: dperson/torproxy
+    container_name: cook2cart-tor-proxy
+    ports:
+      - "8118:8118"
+      - "9050:9050"
+
   video-service:
     build:
       context: ./backend/video-service
@@ -45,6 +52,7 @@ services:
       - kafka
       - elasticsearch
       - redis
+      - tor-proxy
     ports:
       - "8086:8081"
     environment:
@@ -56,6 +64,8 @@ services:
       AUDIO_OUTPUT_DIR: /tmp/cook2cart/audio
       FFMPEG_PATH: ffmpeg
       YT_DLP_PATH: yt-dlp
+      HTTP_PROXY: http://tor-proxy:8118
+      HTTPS_PROXY: http://tor-proxy:8118
     volumes:
       - ./data:/tmp/cook2cart
 
@@ -64,8 +74,12 @@ services:
       context: ./backend/python-transcript-service
       dockerfile: Dockerfile
     container_name: cook2cart-python-transcript-service-8089
+    depends_on:
+      - tor-proxy
     ports:
       - "8089:8089"
+    environment:
+      YOUTUBE_PROXY: http://tor-proxy:8118
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3

@@ -26,7 +26,7 @@ public class VideoService {
     private static final Logger log = LoggerFactory.getLogger(VideoService.class);
 
     private static final Pattern YOUTUBE_VIDEO_ID_PATTERN =
-            Pattern.compile("(?:v=|/)([a-zA-Z0-9_-]{11})");
+            Pattern.compile("(?:v=|/)([a-zA-Z0-9_-]{11,12})");
 
     @Value("${video.output-dir}")
     private String videoOutputDir;

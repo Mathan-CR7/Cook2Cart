@@ -74,7 +74,7 @@ export default function LandingPage() {
     setError('');
     if (!url.trim()) return;
 
-    const match = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
+    const match = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11,12})/);
     const videoId = match?.[1];
     if (!videoId) {
       setError('Invalid YouTube URL. Please enter a valid YouTube link.');

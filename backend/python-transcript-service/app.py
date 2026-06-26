@@ -27,7 +27,7 @@ def get_transcript():
         return jsonify({"error": "video_id parameter is required"}), 400
     
     proxy = request.args.get('proxy') or os.environ.get('YOUTUBE_PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
-    proxies = None
+    proxy_config = None
     if proxy:
         masked_proxy = proxy
         if "@" in proxy:
@@ -41,14 +41,20 @@ def get_transcript():
             except Exception:
                 masked_proxy = "masked_proxy"
         print(f"Using proxy: {masked_proxy}", flush=True)
-        proxies = {
-            "http": proxy,
-            "https": proxy
-        }
+        
+        try:
+            from youtube_transcript_api.proxies import GenericProxyConfig
+            proxy_config = GenericProxyConfig(http_url=proxy, https_url=proxy)
+        except ImportError:
+            print("Failed to import GenericProxyConfig, falling back to dict-based proxies", flush=True)
     
     try:
         # Check and get the transcript list
-        if hasattr(YouTubeTranscriptApi, 'list_transcripts'):
+        if proxy_config:
+            api = YouTubeTranscriptApi(proxy_config=proxy_config)
+            transcript_list = api.list(video_id)
+        elif hasattr(YouTubeTranscriptApi, 'list_transcripts'):
+            proxies = {"http": proxy, "https": proxy} if proxy else None
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
         else:
             transcript_list = YouTubeTranscriptApi().list(video_id)

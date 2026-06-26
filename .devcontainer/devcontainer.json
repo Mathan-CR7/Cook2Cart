@@ -9,7 +9,9 @@
     "ghcr.io/devcontainers/features/node:1": {
       "version": "20"
     },
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    }
   },
   "forwardPorts": [5173, 8080, 8761, 8083, 8084, 8082, 8085, 8086, 8089, 9200],
   "portsAttributes": {
